@@ -145,6 +145,9 @@ import {
   predictTrajectory,
   SOLAR_DATA,
   populateSolarSystem,
+  populateRealisticSolarSystem,
+  keplerianToCartesian,
+  REAL_SOLAR_ELEMENTS,
   createSunEarthTestSystem as createSunEarthTestSystemHelper,
 } from "./orbits.js";
 
@@ -153,6 +156,9 @@ export {
   predictTrajectory,
   SOLAR_DATA,
   populateSolarSystem,
+  populateRealisticSolarSystem,
+  keplerianToCartesian,
+  REAL_SOLAR_ELEMENTS,
 };
 
 import { PhysicsWorkerClient } from "./worker/PhysicsWorkerClient.js";
@@ -330,7 +336,10 @@ export class PhysicsEngine {
           z = bPos.z - aPos.z;
 
         const soft = aSoft || b.metadata.softening || 0;
-        const r2 = x * x + y * y + z * z + soft2 + (soft ? soft * soft : 0);
+        const r2 = Math.max(
+          x * x + y * y + z * z + soft2 + (soft ? soft * soft : 0),
+          1e-18,
+        );
         const r = Math.sqrt(r2);
         let f = effectiveG / (r2 * r);
 
@@ -1138,6 +1147,12 @@ export class PhysicsEngine {
       );
     }
     return bodies;
+  }
+  populateSolarSystem() {
+    return populateSolarSystem(this);
+  }
+  populateRealisticSolarSystem() {
+    return populateRealisticSolarSystem(this);
   }
 }
 

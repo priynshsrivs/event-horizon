@@ -4,6 +4,9 @@ import PhysicsEngine, {
   Vector3,
   CelestialBody,
   createSunEarthTestSystem,
+  populateRealisticSolarSystem,
+  keplerianToCartesian,
+  REAL_SOLAR_ELEMENTS,
   AU_M,
   G,
   auPerYearToMS,
@@ -265,4 +268,38 @@ test("orbital and radiation helpers have physical magnitudes and handle unbound 
   assert.equal(e.calculateOrbitalElements(earth, sun).bound, false);
   assert.equal(e.calculateOrbitalElements(earth, sun).period, Infinity);
   close(e.schwarzschildRadius(1) * AU_M, 2953.34, 1);
+});
+
+test("Keplerian orbital initialization and realistic solar system generation", () => {
+  const engine = new PhysicsEngine();
+  populateRealisticSolarSystem(engine);
+
+  assert.equal(engine.bodies.length, 10); // Sun, 8 planets, Moon
+  const sun = engine.getBody("sun");
+  const earth = engine.getBody("earth");
+  const mercury = engine.getBody("mercury");
+
+  assert.ok(sun && earth && mercury);
+
+  // Check Keplerian elements recovered from Cartesian state
+  const earthElements = engine.calculateOrbitalElements(earth, sun);
+  close(earthElements.semiMajorAxis, 1.0, 0.05);
+  close(earthElements.eccentricity, 0.01671, 0.005);
+  close(earthElements.inclination, 0.0, 0.05);
+
+  const mercuryElements = engine.calculateOrbitalElements(mercury, sun);
+  close(mercuryElements.semiMajorAxis, 0.387, 0.02);
+  close(mercuryElements.eccentricity, 0.2056, 0.01);
+  close(mercuryElements.inclination, 7.005, 0.1);
+
+  // Check barycenter momentum conservation
+  const netMomentum = momentum(engine.bodies);
+  close(netMomentum.length(), 0, 1e-12);
+
+  // Check simulation steps stably
+  for (let i = 0; i < 50; i++) {
+    engine.step(engine.fixedDt, { record: false, environment: false });
+  }
+  assert.ok(engine.bodies.every((b) => Number.isFinite(b.position.x)));
+  assert.ok(engine.bodies.every((b) => Number.isFinite(b.velocity.x)));
 });
