@@ -1652,6 +1652,22 @@ function EHSmokeBackground() {
   );
 }
 
+
+function EHNASA3DVideo() {
+  return (
+    <video
+      className="EH-NASA-3D-VIDEO"
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="auto"
+      aria-hidden="true"
+      src="/textures/nasa-blackhole-360.webm"
+    />
+  );
+}
+
 function SplashScreen({ onEnter }) {
   const [stage, setStage] = useState(1);
   const [pointer, setPointer] = useState({ x: 50, y: 50, active: false });
@@ -1747,6 +1763,11 @@ function SplashScreen({ onEnter }) {
     >
       {/* EH-SMOKE-BACKGROUND-MOUNT */}
       <EHSmokeBackground />
+      <EHNASA3DVideo />
+      <div className="EH-NASA-CREDIT" aria-hidden="true">
+        NASA / GSFC — Jeremy Schnittman
+      </div>
+
 
       <div className="splash-blackout" />
       <div className="splash-stars" aria-hidden="true" />
