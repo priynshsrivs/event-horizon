@@ -68,6 +68,7 @@ export class CelestialBody {
     // the values that participate in equations or renderer transforms.
     for (const [key, fallback, min, max] of [
       ["softening", 0, 0, 1e5],
+      ["captureRadiusAU", 0, 0, 1e5],
       ["visualSize", 0.06, 0.001, 5],
       ["displayScale", 1, 0.001, 1e6],
       ["tidalStretch", 1, 0.2, 3],

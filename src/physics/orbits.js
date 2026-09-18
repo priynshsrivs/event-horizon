@@ -59,25 +59,30 @@ export function predictTrajectory(
 
   const acceleration = (position) => {
     const a = new Vector3();
+    const px = position.x, py = position.y, pz = position.z;
     for (const s of activeSources) {
-      const d = s.position.clone().sub(position);
+      const sp = s.position;
+      const x = sp.x - px, y = sp.y - py, z = sp.z - pz;
       const r2 =
-        d.lengthSq() +
+        x * x + y * y + z * z +
         softening ** 2 +
         (s.metadata.softening || 0) ** 2;
-      a.addScaledVector(
-        d,
-        (G * gravityMultiplier * s.mass) / (r2 * Math.sqrt(r2)),
-      );
+      const factor = (G * gravityMultiplier * s.mass) / (r2 * Math.sqrt(r2));
+      a.x += x * factor;
+      a.y += y * factor;
+      a.z += z * factor;
     }
     return a;
   };
 
-  for (let i = 0; i < Math.min(steps, 256); i++) {
-    const a = acceleration(b.position);
-    b.velocity.addScaledVector(a, dt / 2);
+  const totalSteps = Math.min(steps, 256);
+  let currentAcc = totalSteps > 0 ? acceleration(b.position) : null;
+  for (let i = 0; i < totalSteps; i++) {
+    b.velocity.addScaledVector(currentAcc, dt / 2);
     b.position.addScaledVector(b.velocity, dt);
-    b.velocity.addScaledVector(acceleration(b.position), dt / 2);
+    const nextAcc = acceleration(b.position);
+    b.velocity.addScaledVector(nextAcc, dt / 2);
+    currentAcc = nextAcc;
     if (!b.position.toArray().every(Number.isFinite)) break;
     result.push(b.position.toArray());
   }
@@ -417,7 +422,6 @@ export function keplerianToCartesian({
   const mu = G * gravityMultiplier * (primaryMass + bodyMass);
   const p = a * (1 - e * e);
   const r = p / (1 + e * Math.cos(nu));
-  const h = Math.sqrt(mu * p);
 
   // Orbital plane coordinates (xOrb toward periapsis, zOrb toward true anomaly 90 deg)
   const xOrb = r * Math.cos(nu);

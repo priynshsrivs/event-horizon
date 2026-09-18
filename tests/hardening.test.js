@@ -242,4 +242,76 @@ test("black hole capture region and physical contact prevent slingshot escapes",
   for (let s = 0; s < 100; s++) e2.step();
   assert.ok(starCaptured);
   assert.equal(e2.bodies.length, 1);
+  assert.equal(e2.bodies[0].id, h2.id);
 });
+
+test("tidal stress ratio is invariant with respect to gravityMultiplier", () => {
+  const e1 = new PhysicsEngine();
+  e1.setGravityMultiplier(1);
+  const primary = e1.spawnBody("star", { mass: 1 });
+  const sat = e1.spawnBody("planet", { mass: 3e-6, position: [0.01, 0, 0] });
+  const stress1 = e1.calculateTidalEffects(sat, primary).stressRatio;
+
+  const e5 = new PhysicsEngine();
+  e5.setGravityMultiplier(5);
+  const p5 = e5.spawnBody("star", { mass: 1 });
+  const s5 = e5.spawnBody("planet", { mass: 3e-6, position: [0.01, 0, 0] });
+  const stress5 = e5.calculateTidalEffects(s5, p5).stressRatio;
+
+  near(stress1, stress5, 1e-10);
+});
+
+test("multi-body bounce respects collision cooldown and isolates single-step contacts", () => {
+  const e = new PhysicsEngine();
+  e.gravityMultiplier = 0;
+  e.settings.tides = false;
+  const a = e.addBody({ id: "a", mass: 1e-6, radius: 0.001, position: [0, 0, 0], collisionMode: "bounce" });
+  const b = e.addBody({ id: "b", mass: 1e-6, radius: 0.001, position: [0.0015, 0, 0], collisionMode: "bounce" });
+  e.addBody({ id: "c", mass: 1e-6, radius: 0.001, position: [0.0016, 0, 0], collisionMode: "bounce" });
+
+  let collisionCount = 0;
+  e.on("collision", () => collisionCount++);
+  e.step();
+
+  // In a single step, body a should only bounce with one body (b) due to cooldown isolation
+  assert.equal(collisionCount, 1);
+  assert.ok(a.metadata.collisionCooldown > e.time);
+  assert.ok(b.metadata.collisionCooldown > e.time);
+});
+
+test("black hole merger and supernova collapse compute Kerr spin and bounded rotation", () => {
+  const e = new PhysicsEngine();
+  e.gravityMultiplier = 0;
+  e.settings.tides = false;
+  const bh = e.spawnBody("black hole", { mass: 5, position: [0, 0, 0], velocity: [0, 0, 0] });
+  e.spawnBody("planet", {
+    mass: 0.1,
+    position: [bh.radius * 0.5, 0, 0],
+    velocity: [0, 5, 0],
+  });
+  e.step();
+  assert.equal(e.bodies.length, 1);
+  assert.ok(bh.metadata.kerrSpin !== undefined);
+  assert.ok(Math.abs(bh.metadata.kerrSpin) <= 0.998);
+
+  const eStar = new PhysicsEngine();
+  const massiveStar = eStar.spawnBody("star", {
+    mass: 25,
+    angularVelocity: [0, 2, 0],
+  });
+  const remnant = eStar.triggerSupernova(massiveStar.id);
+  assert.equal(remnant.type, "black hole");
+  assert.ok(remnant.metadata.kerrSpin !== undefined);
+  assert.ok(Math.abs(remnant.metadata.kerrSpin) <= 0.998);
+});
+
+test("solar flare direction vector is strictly normalized unit vector", () => {
+  const e = new PhysicsEngine();
+  const star = e.spawnBody("star");
+  for (let i = 0; i < 20; i++) {
+    const flare = e.triggerSolarFlare(star.id);
+    const [x, y, z] = flare.direction;
+    near(Math.hypot(x, y, z), 1.0, 1e-10);
+  }
+});
+

@@ -22,7 +22,7 @@ export function calculateTidalEffects(body, primary, gravityMultiplier = 1) {
   const tidalAcceleration =
     (2 * G * gravityMultiplier * primary.mass * body.radius) /
     distance ** 3;
-  const selfGravity = (G * body.mass) / body.radius ** 2;
+  const selfGravity = (G * gravityMultiplier * body.mass) / body.radius ** 2;
 
   return {
     distance,

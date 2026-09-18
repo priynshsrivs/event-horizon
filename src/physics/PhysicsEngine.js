@@ -197,6 +197,7 @@ export class PhysicsEngine {
     };
     this.seed = 2026;
     this._environmentCounter = 0;
+    this._accelerationsValid = false;
     this.initialState = null;
   }
   random() {
@@ -228,6 +229,7 @@ export class PhysicsEngine {
     if (this.getBody(body.id))
       throw new Error(`Duplicate body identifier: ${body.id}`);
     this.bodies.push(body);
+    this._accelerationsValid = false;
     this.emit("bodyAdded", { body });
     return body;
   }
@@ -255,6 +257,7 @@ export class PhysicsEngine {
       for (const key of ["primaryId", "tidalPrimaryId", "nearestStarId"])
         if (other.metadata[key] === body.id) delete other.metadata[key];
     }
+    this._accelerationsValid = false;
     this.emit("bodyRemoved", { body });
     return true;
   }
@@ -268,11 +271,13 @@ export class PhysicsEngine {
       metadata: { ...body.metadata, ...changes.metadata },
     });
     Object.assign(body, safe);
+    this._accelerationsValid = false;
     this.emit("bodyUpdated", { body });
     return body;
   }
   clearBodies() {
     this.bodies = [];
+    this._accelerationsValid = false;
     this.emit("simulationReset");
   }
   pause() {
@@ -288,6 +293,7 @@ export class PhysicsEngine {
   }
   setGravityMultiplier(value) {
     this.gravityMultiplier = clamp(finite(value, 1), 0, 10);
+    this._accelerationsValid = false;
   }
   _containNonFinite(b) {
     b.position.copy(b._previous || new Vector3());
@@ -300,6 +306,7 @@ export class PhysicsEngine {
     b.recalculateDensity();
     b.enabled = false;
     this.pause();
+    this._accelerationsValid = false;
     this.emit("numericalWarning", {
       body: b,
       message:
@@ -392,7 +399,9 @@ export class PhysicsEngine {
       }
     }
 
-    this.calculateAccelerations();
+    if (!this._accelerationsValid) {
+      this.calculateAccelerations();
+    }
     for (const b of this.bodies) {
       if (!b.active || !b.enabled) continue;
       b._previous = b._previous || new Vector3();
@@ -422,6 +431,7 @@ export class PhysicsEngine {
         (b.metadata.localTime || 0) + dt * (b.metadata.localTimeFactor ?? 1);
     }
     this.time += dt;
+    this._accelerationsValid = true;
     this.handlePortalsAndCaptures();
     if (this.settings.collisions) this.handleCollisions();
     if (environment && ++this._environmentCounter % 16 === 0)
@@ -568,6 +578,7 @@ export class PhysicsEngine {
         }
         if (a.collisionMode === "bounce" || b.collisionMode === "bounce") {
           this.bounceBodies(a, b);
+          if ((a.metadata.collisionCooldown || 0) > this.time) break;
           continue;
         }
         const outcome = calculateCollisionOutcome(a, b, this.gravityMultiplier);
@@ -583,6 +594,7 @@ export class PhysicsEngine {
   }
   bounceBodies(a, b, restitution = 0.55, friction = 0.2) {
     bounceBodies(a, b, restitution, friction, this.time, this.fixedDt);
+    this._accelerationsValid = false;
     this.emit("impactWave", { position: a.position.clone(), intensity: 0.5 });
   }
   calculateAngularMomentumBudget(
@@ -629,6 +641,10 @@ export class PhysicsEngine {
     a.metadata.lastEjectMass = ejectMass;
     a.velocity.copy(velocity);
     a.angularVelocity.copy(L).divideScalar(0.4 * a.mass * a.radius ** 2);
+    if (a.type === "black hole") {
+      const cAu = msToAUPerYear(C_M_PER_S);
+      a.metadata.kerrSpin = clamp((cAu * L.y) / (G * a.mass ** 2), -0.998, 0.998);
+    }
     a.metadata.impactHeatJ = heat;
     a.metadata.impactTemperatureSpike = clamp(
       heat / (solarMassesToKg(a.mass) * 800),
@@ -910,6 +926,11 @@ export class PhysicsEngine {
       .multiplyScalar(
         (star.mass * star.radius ** 2) / (remnant.mass * remnant.radius ** 2),
       );
+    if (remnantType === "black hole") {
+      const cAu = msToAUPerYear(C_M_PER_S);
+      const starL = star.angularVelocity.y * (0.4 * star.mass * star.radius ** 2);
+      remnant.metadata.kerrSpin = clamp((cAu * starL) / (G * remnant.mass ** 2), -0.998, 0.998);
+    }
     const shellSource = star.clone();
     shellSource.radius = Math.max(star.radius, 0.01);
     const ejecta = this.generateDebris(
@@ -1047,6 +1068,7 @@ export class PhysicsEngine {
     }
     this.accumulator = 0;
     this.lastHistoryTime = this.time;
+    this._accelerationsValid = false;
     this.emit("simulationReset");
   }
   recordHistory() {

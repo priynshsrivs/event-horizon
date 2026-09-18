@@ -75,8 +75,10 @@ function hookEvents() {
     "supernova",
     "tidalDisruption",
     "wormholeTransit",
-    "wormholeExit",
-    "blackHoleCapture",
+    "bodyCaptured",
+    "eventHorizonCrossed",
+    "captureRegionEntered",
+    "catastrophicDisruption",
     "simulationReset",
   ];
   for (const name of forwarded) {
@@ -221,7 +223,7 @@ export function handleMessage(data) {
         post({
           id,
           status: "OK",
-          trajectory: trajectory.map((p) => [p.x, p.y, p.z]),
+          trajectory,
         });
         break;
       }

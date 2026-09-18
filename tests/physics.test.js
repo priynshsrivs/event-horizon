@@ -5,10 +5,7 @@ import PhysicsEngine, {
   CelestialBody,
   createSunEarthTestSystem,
   populateRealisticSolarSystem,
-  keplerianToCartesian,
-  REAL_SOLAR_ELEMENTS,
   AU_M,
-  G,
   auPerYearToMS,
 } from "../src/physics/PhysicsEngine.js";
 

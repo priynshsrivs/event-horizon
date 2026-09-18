@@ -14,6 +14,8 @@ export const TAU = Math.PI * 2;
 
 export const auToMeters = (x) => x * AU_M;
 export const metersToAU = (x) => x / AU_M;
+export const solarRadiusToAU = (x) => x * SOLAR_RADIUS_M / AU_M;
+export const auToSolarRadii = (x) => x * AU_M / SOLAR_RADIUS_M;
 
 export const solarMassesToKg = (x) => x * SOLAR_MASS_KG;
 export const kgToSolarMasses = (x) => x / SOLAR_MASS_KG;

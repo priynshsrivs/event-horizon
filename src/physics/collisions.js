@@ -1,10 +1,7 @@
 import { Vector3 } from "./Vector3.js";
 import {
   G,
-  TAU,
   clamp,
-  solarMassesToKg,
-  auPerYearToMS,
 } from "./constants.js";
 
 /**
@@ -36,6 +33,22 @@ export function bounceBodies(
   time = 0,
   fixedDt = 1 / 32768,
 ) {
+  const originalL = calculateAngularMomentumBudget([a, b]);
+  // Resolve swept contacts at first touch rather than using a separating end normal.
+  if (a._previous && b._previous) {
+    const start = b._previous.clone().sub(a._previous);
+    const delta = b.position.clone().sub(a.position).sub(start);
+    const A = delta.lengthSq(), B = 2 * start.dot(delta);
+    const C = start.lengthSq() - (a.radius + b.radius) ** 2;
+    const discriminant = B * B - 4 * A * C;
+    if (A > 0 && C > 0 && discriminant >= 0) {
+      const t = (-B - Math.sqrt(discriminant)) / (2 * A);
+      if (t >= 0 && t <= 1) {
+        a.position.copy(a._previous.clone().lerp(a.position, t));
+        b.position.copy(b._previous.clone().lerp(b.position, t));
+      }
+    }
+  }
   const n = b.position.clone().sub(a.position).normalize();
   if (!n.lengthSq()) n.set(1, 0, 0);
   const ra = n.clone().multiplyScalar(a.radius);
@@ -79,6 +92,10 @@ export function bounceBodies(
     1e-10;
   a.position.addScaledVector(n, (-overlap * b.mass) / (a.mass + b.mass));
   b.position.addScaledVector(n, (overlap * a.mass) / (a.mass + b.mass));
+  // Positional separation can change orbital L for overlapping initial states.
+  const correction = originalL.sub(calculateAngularMomentumBudget([a, b])).divideScalar(inertiaA + inertiaB);
+  a.angularVelocity.add(correction);
+  b.angularVelocity.add(correction);
   a.metadata.collisionCooldown = b.metadata.collisionCooldown =
     time + fixedDt * 2;
 }
@@ -113,14 +130,24 @@ export function calculateCollisionOutcome(a, b, gravityMultiplier = 1) {
     (2 * G * gravityMultiplier * (a.mass + b.mass)) /
       (a.radius + b.radius),
   );
-  const ratio = speed / Math.max(escape, 1e-10);
+  const reducedMass = a.mass * b.mass / (a.mass + b.mass);
+  const impactEnergy = 0.5 * reducedMass * speed ** 2;
+  // Uniform-sphere self-binding plus mutual binding at contact, in M☉ AU²/yr².
+  const bindingEnergy = G * gravityMultiplier * (
+    0.6 * (a.mass ** 2 / a.radius + b.mass ** 2 / b.radius) +
+    a.mass * b.mass / (a.radius + b.radius)
+  );
+  const ratio = impactEnergy / Math.max(bindingEnergy, 1e-30);
+  const catastrophic = ratio >= 2;
   const fraction =
     a.collisionMode === "merge" || b.collisionMode === "merge"
       ? 0
-      : clamp((ratio - 0.9) * 0.15, 0, 0.45);
+      : catastrophic ? 0.5 + 0.4 * (1 - 2 / ratio)
+        : clamp((ratio - 0.05) * 0.3, 0, 0.45);
   const survivor = a.mass >= b.mass ? a : b;
   const victim = survivor === a ? b : a;
-  return { speed, escape, ratio, fraction, survivor, victim };
+  return { speed, escape, reducedMass, impactEnergy, bindingEnergy, ratio,
+    fraction, catastrophic: catastrophic && fraction > 0, survivor, victim };
 }
 
 /**
@@ -137,15 +164,16 @@ export function createDebrisPayloads({
   fixedDt = 1 / 32768,
   random = Math.random,
 }) {
-  let count = Math.min(requestedCount, maxAvailable);
+  let count = Math.min(requestedCount, maxAvailable, Math.floor(mass / 1e-20));
   count -= count % 2;
   if (count < 2) return [];
 
   const payloads = [];
-  const radius = source.radius * Math.cbrt(mass / source.mass / count) * 0.7;
+  const originalMass = source.mass + (source.metadata?.lastEjectMass || 0);
+  const radius = source.radius * Math.cbrt(mass / Math.max(originalMass, mass, 1e-30) / count);
 
   for (let i = 0; i < count / 2; i++) {
-    const angle = (TAU * i) / (count / 2);
+    const angle = (Math.PI * i) / (count / 2);
     const y = (random() - 0.5) * 0.7;
     const direction = new Vector3(
       Math.cos(angle),
@@ -168,10 +196,11 @@ export function createDebrisPayloads({
         temperature: Math.min(source.temperature, 5000),
         composition: source.composition,
         metadata: {
-          visualSize: 0.018,
+          visualSize: 0.025,
           color: "#e9aa79",
           collisionCooldown: time + fixedDt * 32,
           fragment: true,
+          impactGlowUntil: time + 0.01,
           displayScale: source.metadata.displayScale || 1,
         },
       });

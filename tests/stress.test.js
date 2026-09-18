@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import PhysicsEngine, {
-  Vector3,
   G,
   TAU,
   createSunEarthTestSystem,
@@ -126,7 +125,7 @@ test("repeated high-energy collisions maintain finite state and momentum", () =>
   engine.settings.collisions = true;
 
   // Head-on collision pair with merge
-  const a = engine.spawnBody("planet", {
+  engine.spawnBody("planet", {
     id: "head-a",
     mass: 0.1,
     radius: 0.0005,
@@ -134,7 +133,7 @@ test("repeated high-energy collisions maintain finite state and momentum", () =>
     velocity: [10, 0, 0],
     collisionMode: "merge",
   });
-  const b = engine.spawnBody("planet", {
+  engine.spawnBody("planet", {
     id: "head-b",
     mass: 0.1,
     radius: 0.0005,

@@ -7,11 +7,8 @@ export class PhysicsWorkerClient {
     this.worker =
       options.worker ||
       (typeof Worker !== "undefined"
-        ? new Worker(
-            options.workerUrl ||
-              new URL("./physicsWorker.js", import.meta.url),
-            { type: "module" },
-          )
+        ? options.workerUrl ? new Worker(options.workerUrl, { type: "module" })
+          : new Worker(new URL("./physicsWorker.js", import.meta.url), { type: "module" })
         : null);
 
     this._requestId = 0;
@@ -52,6 +49,8 @@ export class PhysicsWorkerClient {
 
     if (typeof worker.onerror === "function" || "onerror" in worker) {
       worker.onerror = (err) => {
+        for (const { reject } of this._pending.values()) reject(new Error(err.message || "Worker failed"));
+        this._pending.clear();
         this.emit("error", err);
       };
     }
@@ -65,7 +64,8 @@ export class PhysicsWorkerClient {
     const id = ++this._requestId;
     return new Promise((resolve, reject) => {
       this._pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, action, payload });
+      try { this.worker.postMessage({ id, action, payload }); }
+      catch (error) { this._pending.delete(id); reject(error); }
     });
   }
 
@@ -171,6 +171,7 @@ export class PhysicsWorkerClient {
     if (this.worker && typeof this.worker.terminate === "function") {
       this.worker.terminate();
     }
+    this.worker = null;
   }
 }
 

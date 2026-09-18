@@ -31,9 +31,10 @@ export function calculateRadiation(body, bodies = []) {
  */
 export function calculateEquilibriumTemperature(body, bodies = []) {
   const { flux } = calculateRadiation(body, bodies);
+  const emissivity = Math.max(0.0001, body.emissivity || 1);
   return Math.pow(
-    (flux * (1 - body.albedo)) /
-      (4 * 5.670374419e-8 * body.emissivity),
+    Math.max(0, (flux * (1 - body.albedo)) /
+      (4 * 5.670374419e-8 * emissivity)),
     0.25,
   );
 }

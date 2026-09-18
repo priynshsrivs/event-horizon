@@ -6,6 +6,7 @@ import {
   SOLAR_MASS_KG,
   C_M_PER_S,
 } from "./constants.js";
+import { stellarLuminosity } from "./stellar.js";
 
 export const BODY_PRESETS = {
   asteroid: {
@@ -118,3 +119,14 @@ export const BODY_PRESETS = {
 };
 
 export default BODY_PRESETS;
+
+// Representative radii and effective temperatures define bolometric L/L☉.
+for (const [type, classification] of Object.entries({
+  star: "G main sequence", "red giant": "M giant", "red supergiant": "M supergiant",
+  "white dwarf": "Hot carbon–oxygen remnant", "brown dwarf": "L/T substellar object",
+  "neutron star": "Thermal compact remnant", magnetar: "Magnetic neutron star",
+})) {
+  const preset = BODY_PRESETS[type];
+  preset.luminosity = stellarLuminosity(preset.radius, preset.temperature);
+  preset.metadata.classification = classification;
+}
