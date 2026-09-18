@@ -598,6 +598,9 @@ function GodPanel({
         <h3>
           Create an object <small>CLICK, THEN DRAG IN SPACE</small>
         </h3>
+        <p className="fine-print">
+          Black holes use the NASA TON 618 visual and keep physics radius separate from visual radius.
+        </p>
         <div className="spawn-grid">
           {EXOTIC_TYPES.map((type) => (
             <button key={type} onClick={() => onBuild(type)}>
