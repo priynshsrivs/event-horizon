@@ -1,31 +1,23 @@
-/**
+﻿/**
  * Event Horizon simulation kernel. No renderer, DOM, React or Three.js dependencies.
- * Positions/radii: AU. Mass: M☉. Time: Julian years. Temperature: kelvin.
+ * Positions/radii: AU. Mass: Mâ˜‰. Time: Julian years. Temperature: kelvin.
  * Velocity: AU/yr, angular velocity: rad/yr. SI is used only at named boundaries.
  * Newtonian point-mass dynamics are integrated with velocity Verlet. Collisions,
  * tides, stellar evolution and magnetic effects are intentionally reduced models.
  */
-export const AU_M = 149597870700;
-export const SOLAR_MASS_KG = 1.98847e30;
-export const SOLAR_RADIUS_M = 6.957e8;
-export const EARTH_MASS_KG = 5.9722e24;
-export const EARTH_RADIUS_M = 6.371e6;
-export const JULIAN_YEAR_SECONDS = 31557600;
-export const DAY_SECONDS = 86400;
-export const C_M_PER_S = 299792458;
-export const G_SI = 6.6743e-11;
-export const SOLAR_LUMINOSITY_W = 3.828e26;
-export const G = 4 * Math.PI ** 2;
-export const TAU = Math.PI * 2;
-export const auToMeters = (x) => x * AU_M;
-export const metersToAU = (x) => x / AU_M;
-export const solarMassesToKg = (x) => x * SOLAR_MASS_KG;
-export const kgToSolarMasses = (x) => x / SOLAR_MASS_KG;
-export const auPerYearToMS = (x) => (x * AU_M) / JULIAN_YEAR_SECONDS;
-export const msToAUPerYear = (x) => (x * JULIAN_YEAR_SECONDS) / AU_M;
-export const yearsToSeconds = (x) => x * JULIAN_YEAR_SECONDS;
-export const secondsToYears = (x) => x / JULIAN_YEAR_SECONDS;
-export const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+import {
+  AU_M, SOLAR_MASS_KG, SOLAR_RADIUS_M, EARTH_MASS_KG, EARTH_RADIUS_M,
+  JULIAN_YEAR_SECONDS, DAY_SECONDS, C_M_PER_S, G_SI, SOLAR_LUMINOSITY_W,
+  G, TAU, auToMeters, metersToAU, solarMassesToKg, kgToSolarMasses,
+  auPerYearToMS, msToAUPerYear, yearsToSeconds, secondsToYears, clamp
+} from "./constants.js";
+
+export {
+  AU_M, SOLAR_MASS_KG, SOLAR_RADIUS_M, EARTH_MASS_KG, EARTH_RADIUS_M,
+  JULIAN_YEAR_SECONDS, DAY_SECONDS, C_M_PER_S, G_SI, SOLAR_LUMINOSITY_W,
+  G, TAU, auToMeters, metersToAU, solarMassesToKg, kgToSolarMasses,
+  auPerYearToMS, msToAUPerYear, yearsToSeconds, secondsToYears, clamp
+};
 const finite = (x, fallback = 0) =>
   Number.isFinite(Number(x)) ? Number(x) : fallback;
 const jsonClone = (x) => JSON.parse(JSON.stringify(x));
@@ -354,7 +346,7 @@ export class PhysicsEngine {
     this.bodies = [];
     this.time = 0;
     this.paused = false;
-    // 0.04 yr/s ≈ 14.6 days per real second; UI states this explicitly.
+    // 0.04 yr/s â‰ˆ 14.6 days per real second; UI states this explicitly.
     this.timeScale = 0.04;
     this.gravityMultiplier = 1;
     this.fixedDt = options.fixedDt || 1 / 32768;
@@ -606,18 +598,30 @@ export class PhysicsEngine {
       if (!source.enabled || !source.active) continue;
       if (source.type === "black hole") {
         const horizon = this.schwarzschildRadius(source.mass);
+        // Use a larger capture threshold (10× horizon) for more interactive black hole behavior
+        // The true Schwarzschild radius is microscopic in simulation units,
+        // making capture nearly impossible without this multiplier
+        const captureThreshold = horizon * 10;
         for (const b of [...this.bodies])
           if (
             b !== source &&
             b.active &&
             b.enabled &&
             b.type !== "wormhole" &&
-            this.closestApproach(source, b) <= horizon &&
+            this.closestApproach(source, b) <= captureThreshold &&
             this.getBody(b.id)
           ) {
             this.emit("eventHorizonCrossed", { body: b, primary: source });
+            const capturedMass = b.mass;
             this.mergeBodies(source, b, 0);
             this.emit("bodyCaptured", { body: b, primary: source });
+            // Trigger screen shake on engulfment, scaled by captured mass
+            this.emit("blackHoleEngulfment", {
+              source,
+              mass: capturedMass,
+              intensity: Math.min(3, Math.log1p(capturedMass) * 0.5),
+              duration: 0.6,
+            });
           }
       }
       if (source.type === "wormhole") {
@@ -967,7 +971,7 @@ export class PhysicsEngine {
     );
   }
   calculateFrameDragging(body, distance) {
-    // Kerr-inspired weak-field angular rate in rad/yr, with dimensionless spin parameter χ.
+    // Kerr-inspired weak-field angular rate in rad/yr, with dimensionless spin parameter Ï‡.
     const m = solarMassesToKg(body.mass),
       r = auToMeters(Math.max(distance, this.schwarzschildRadius(body.mass)));
     const J =
@@ -1521,7 +1525,7 @@ export class PhysicsEngine {
     const link = `portal-${this.random()}`;
     return [-1, 1].map((side, i) =>
       this.spawnBody("wormhole", {
-        name: `Wormhole ${i ? "β" : "α"}`,
+        name: `Wormhole ${i ? "Î²" : "Î±"}`,
         position: Vector3.from(center).add(new Vector3(side, 0, side)),
         metadata: { wormholeLink: link },
       }),
@@ -1607,7 +1611,7 @@ export const SOLAR_DATA = [
     composition: ["Silicate rock", "Iron core", "Carbon dioxide atmosphere"],
     description:
       "A world wrapped in sulfuric-acid clouds. A powerful greenhouse effect makes Venus the hottest planet.",
-    atmosphere: { dominantGas: "CO₂", surfacePressureBar: 92 },
+    atmosphere: { dominantGas: "COâ‚‚", surfacePressureBar: 92 },
   },
   {
     name: "Earth",
@@ -1623,8 +1627,8 @@ export const SOLAR_DATA = [
     albedo: 0.306,
     composition: ["Iron / nickel core", "Silicate mantle", "Liquid water"],
     description:
-      "Our pale blue dot. The only known world with stable surface oceans and life, protected by a magnetic field and a nitrogen–oxygen atmosphere.",
-    atmosphere: { dominantGas: "N₂ / O₂", surfacePressureBar: 1 },
+      "Our pale blue dot. The only known world with stable surface oceans and life, protected by a magnetic field and a nitrogenâ€“oxygen atmosphere.",
+    atmosphere: { dominantGas: "Nâ‚‚ / Oâ‚‚", surfacePressureBar: 1 },
   },
   {
     name: "Mars",
@@ -1772,7 +1776,7 @@ export function populateSolarSystem(engine) {
       primaryId: "earth",
       rotationDays: 27.32,
       description:
-        "Earth’s large natural satellite. Its familiar near side stays turned toward Earth through synchronous rotation.",
+        "Earthâ€™s large natural satellite. Its familiar near side stays turned toward Earth through synchronous rotation.",
     },
   });
   const momentum = new Vector3();
@@ -1800,3 +1804,4 @@ export function createSunEarthTestSystem() {
   return engine;
 }
 export default PhysicsEngine;
+
