@@ -2,51 +2,75 @@
 
 ## Automated checks
 
-`npm test` runs 36 Node test suites against the renderer-independent physics engine:
+`npm test` runs 58 Node test suites against the renderer-independent physics engine across 5 test files:
 
-### Core physics & numerical conservation
-1. Vector algebra, serialization, input defaults and vector restoration.
-2. One-year Sun–Earth orbit, approximate 29.8 km/s speed and relative energy error below 10⁻⁸.
-3. One-year full Solar System, Earth distance, lunar binding and balanced momentum.
-4. Sun-mass response, Jupiter perturbation and safe body removal.
-5. Merge mass, linear/angular momentum and off-center spin.
-6. 3D bounce separation, linear momentum and friction-induced spin.
-7. Partial accretion with physical ejecta and conserved mass/momentum.
-8. Tidal fragment mass and center-of-mass velocity.
-9. Wormhole speed preservation and cooldown.
-10. Event-horizon capture and mass preservation.
-11. Manual/automatic flares, exposure and expiration.
-12. Supernova remnant, ejecta, mass and momentum.
-13. Snapshots, branches, undo/redo, invalid save rejection and non-mutating prediction.
-14. Substep/history bounds, duplicate identifiers and pause.
-15. Orbital/radiative/Schwarzschild magnitudes and unbound orbits.
-16. Keplerian orbital initialization and realistic 3D Solar System generation (`REAL_SOLAR_ELEMENTS`, `keplerianToCartesian`, `populateRealisticSolarSystem`).
+### Hardening, Relativity & Edge Cases (`tests/hardening.test.js`)
+1. Swept moving black-hole capture conserves mass, momentum, spin and grows horizon.
+2. Grazing black-hole trajectory is not captured by mesh size or projectile radius.
+3. Sequential captures update horizon and removed holes cannot capture ghosts.
+4. Enlarged simulation capture region never reports a physical horizon crossing.
+5. Dimensionless impact energy selects merge, partial and catastrophic outcomes.
+6. Catastrophic impact conserves total mass, COM and angular momentum with physical debris.
+7. Swept bounce reverses a fast projectile and conserves linear/angular momentum.
+8. Debris capacity fallback preserves mass at 128 bodies and repeated history restores.
+9. Roche density scaling, distant stability and elongated tidal stream conservation.
+10. Stellar presets obey thermal luminosity, representative densities and radius units.
+11. Radiation and equilibrium temperature scale with luminosity, distance, albedo and emissivity.
+12. Planckian RGB is bounded, cool orange and hot blue-white.
+13. Bad mass cannot contaminate a healthy neighbor and frame stepping stops on warning.
+14. Preferences persist only validated settings and tolerate corrupt or unavailable storage.
+15. Constructor resource bounds and malformed null imports are safe.
+16. Black hole capture region and physical contact prevent slingshot escapes.
+17. Tidal stress ratio is invariant with respect to gravityMultiplier.
+18. Multi-body bounce respects collision cooldown and isolates single-step contacts.
+19. Black hole merger and supernova collapse compute Kerr spin and bounded rotation.
+20. Solar flare direction vector is strictly normalized unit vector.
 
-### Scenarios & astrophysics
-17. All 13 local textures have valid JPEG signatures and nonempty data.
-18. All eight story scenes initialize and step with finite state.
-19. Controlled Theia collision produces ejecta and spin while conserving mass.
-20. Swept collision catches a fast projectile crossing a physical radius between steps.
-21. Automatic Roche disruption and magnetar material selectivity.
-22. Exotic type presets, plausible asteroid/comet densities and mass-dependent horizons.
-23. Binary barycenter, momentum and circular speed.
-24. Ten-year Solar System stability: all 10 bodies retained, lunar binding, relative total-energy drift below 10⁻⁵.
-25. Reverse playback moves through history instead of integrating backwards.
-26. Non-finite integration is contained rather than propagating to the renderer.
-27. Malformed imported display metadata is sanitized without discarding valid extension fields.
+### Core physics & numerical conservation (`tests/physics.test.js`)
+21. Vector algebra, serialization, input defaults and vector restoration.
+22. One-year Sun–Earth orbit, approximate 29.8 km/s speed and relative energy error below 10⁻⁸.
+23. One-year full Solar System, Earth distance, lunar binding and balanced momentum.
+24. Sun-mass response, Jupiter perturbation and safe body removal.
+25. Glancing merge mass, linear/angular momentum and off-center spin.
+26. 3D bounce separation, linear momentum and friction-induced spin.
+27. Partial accretion with physical ejecta and conserved mass/momentum.
+28. Tidal fragment mass and center-of-mass velocity.
+29. Wormhole speed preservation and cooldown.
+30. Event-horizon capture and mass preservation.
+31. Manual/automatic flares, exposure and expiration.
+32. Supernova remnant, ejecta, mass and momentum.
+33. Snapshots, branches, undo/redo, invalid save rejection and non-mutating prediction.
+34. Substep/history bounds, duplicate identifiers and pause.
+35. Orbital/radiative/Schwarzschild magnitudes and unbound orbits.
+36. Keplerian orbital initialization and realistic 3D Solar System generation (`REAL_SOLAR_ELEMENTS`, `keplerianToCartesian`, `populateRealisticSolarSystem`).
+
+### Scenarios & astrophysics (`tests/scenarios.test.js`)
+37. All 13 local textures have valid JPEG signatures and nonempty data.
+38. All eight story scenes initialize and step with finite state.
+39. Controlled Theia collision produces ejecta and spin while conserving mass.
+40. Swept collision catches a fast projectile crossing a physical radius between steps.
+41. Automatic Roche disruption and magnetar material selectivity.
+42. Exotic type presets, plausible asteroid/comet densities and mass-dependent horizons.
+43. Binary barycenter, momentum and circular speed.
+44. Ten-year Solar System stability: all 10 bodies retained, lunar binding, relative total-energy drift below 10⁻⁵.
+45. Reverse playback moves through history instead of integrating backwards.
+46. Non-finite integration is contained rather than propagating to the renderer.
+47. Malformed imported display metadata is sanitized without discarding valid extension fields.
 
 ### Stress & edge conditions (`tests/stress.test.js`)
-28. Simulation near 128-body capacity steps stably and rejects overflows beyond limit.
-29. High-frequency debris creation cannot exceed maximum body cap and conserves total mass.
-30. Extreme time scales, zero/negative dt, infinite dt, and time scale clamping.
-31. Repeated high-energy collisions maintain finite state and momentum conservation.
-32. Deep history snapshot buffer wraparound and arbitrary seek index clamping.
-33. Long-running simulation (1000 steps) maintains energy drift below 10⁻⁵.
-34. Non-finite state containment isolates corrupted coordinates, pauses simulation, and preserves healthy neighbors.
+48. Simulation near 128-body capacity steps stably and rejects overflows beyond limit.
+49. High-frequency debris creation cannot exceed maximum body cap and conserves total mass.
+50. Extreme time scales, zero/negative dt, infinite dt, and time scale clamping.
+51. Repeated high-energy collisions maintain finite state and momentum conservation.
+52. Repeated history snapshot buffer wraparound and arbitrary seek index clamping.
+53. Long-running simulation (1000 steps) maintains energy drift below 10⁻⁵.
+54. Non-finite state containment isolates corrupted coordinates, pauses simulation, and preserves healthy neighbors.
 
 ### Web Worker architecture (`tests/worker.test.js`)
-35. `PhysicsWorkerClient` lifecycle: initialization, body spawning, integration stepping, pause/resume, and state caching.
-36. `PhysicsWorkerClient` error propagation and graceful rejection of invalid actions.
+55. `PhysicsWorkerClient` lifecycle: initialization, body spawning, integration stepping, pause/resume, and state caching.
+56. `PhysicsWorkerClient` error propagation and graceful rejection of invalid actions.
+57. Worker failure rejects pending requests instead of leaving callers hanging.
+58. Production worker entry bundles its physics dependencies.
 
 ---
 

@@ -37,6 +37,7 @@ function createBenchmarkSystem(bodyCount) {
 }
 
 function runBenchmark() {
+  const benchmarkStart = performance.now();
   const TARGET_COUNTS = [10, 25, 50, 100, 128];
   const WARMUP_STEPS = 50;
   const MEASURED_STEPS = 1000;
@@ -77,6 +78,7 @@ function runBenchmark() {
   }
 
   console.table(results);
+  console.log(`Total benchmark wall time: ${(performance.now() - benchmarkStart).toFixed(2)} ms (including warm-up).`);
   console.log("=".repeat(78));
 }
 
