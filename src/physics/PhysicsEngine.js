@@ -462,6 +462,7 @@ export class PhysicsEngine {
     if (body.type === "black hole") {
       nextData.radius = this.schwarzschildRadius(nextData.mass);
     }
+    const safe = new CelestialBody(nextData);
     Object.assign(body, safe);
     this.emit("bodyUpdated", { body });
     return body;
