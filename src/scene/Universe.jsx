@@ -122,6 +122,43 @@ function SpaceBackground() {
 
 const glowVertex = `varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
 const glowFragment = `varying vec2 vUv; uniform vec3 color; uniform float strength; void main(){float r=length(vUv-.5)*2.;float a=pow(max(0.,1.-r),3.)*strength;gl_FragColor=vec4(color,a);}`;
+
+// Enhanced stellar surface shader with limb darkening and surface detail
+const stellarVertex = `
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  void main(){
+    vUv = uv;
+    vNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+const stellarFragment = `
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  uniform sampler2D map;
+  uniform vec3 color;
+  uniform float time;
+
+  float noise(vec3 p){
+    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+  }
+
+  void main(){
+    vec3 base = texture2D(map, vUv).rgb * color;
+
+    // Limb darkening effect
+    float rim = 1.0 - abs(vNormal.z);
+    rim = pow(rim, 2.2);
+    base *= (0.7 + rim * 0.3);
+
+    // Surface granulation (simplified)
+    float gran = noise(vUv * 20.0 + time * 0.1) * 0.15;
+    base += gran * color;
+
+    gl_FragColor = vec4(base, 1.0);
+  }
+`;
 function Glow({ color = "#f3ad65", size = 1, opacity = 0.6 }) {
   const uniforms = useMemo(
     () => ({
@@ -144,6 +181,46 @@ function Glow({ color = "#f3ad65", size = 1, opacity = 0.6 }) {
         />
       </mesh>
     </Billboard>
+  );
+}
+
+function DynamicSolarFlares({ body, radius }) {
+  const ref = useRef();
+  const flareCount = Math.min(8, Math.max(2, Math.floor(Math.log1p(body.radius) * 1.5)));
+
+  useFrame(({ clock }) => {
+    if (ref.current) {
+      ref.current.children.forEach((child, i) => {
+        const time = clock.elapsedTime;
+        const phase = (i / flareCount) * Math.PI * 2;
+        const scale = 0.8 + Math.sin(time * 2 + phase) * 0.4;
+        const yOffset = Math.cos(time * 1.5 + phase) * radius * 1.2;
+        const xOffset = Math.sin(time * 1.2 + phase) * radius * 0.8;
+
+        child.position.set(xOffset, yOffset, 0);
+        child.scale.setScalar(scale);
+        child.material.opacity = 0.6 + Math.sin(time * 3 + phase) * 0.3;
+      });
+    }
+  });
+
+  return (
+    <group ref={ref}>
+      {Array.from({ length: flareCount }).map((_, i) => (
+        <Billboard key={i}>
+          <mesh position={[radius * 0.8, radius * 0.6, 0]}>
+            <planeGeometry args={[radius * 0.4, radius * 0.6]} />
+            <meshBasicMaterial
+              color="#ffcc66"
+              transparent
+              opacity={0.6}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        </Billboard>
+      ))}
+    </group>
   );
 }
 
@@ -572,6 +649,18 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
           </mesh>
         </group>
       )}
+      {body.type === "debris" && (
+        <mesh>
+          <dodecahedronGeometry args={[radius * 0.8, 0]} />
+          <meshStandardMaterial
+            color={body.metadata.color || "#a8a8a8"}
+            roughness={0.95}
+            metalness={0.1}
+            emissive={body.metadata.color || "#333333"}
+            emissiveIntensity={(body.metadata.impactGlowUntil || 0) > engine.time ? 0.6 : 0}
+          />
+        </mesh>
+      )}
       {(selected || hover) && (
         <SelectionRing radius={radius} selected={selected} />
       )}
@@ -821,12 +910,26 @@ function CameraController({
     offset = useRef(new THREE.Vector3()),
     previous = useRef(new THREE.Vector3()),
     moving = useRef(true),
-    focused = useRef(null);
+    focused = useRef(null),
+    shake = useRef({ intensity: 0, duration: 0, elapsed: 0 });
   const temp = useMemo(() => new THREE.Vector3(), []),
     reduced = useMemo(
       () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       [],
     );
+
+  useEffect(() => {
+    const handleEngulfment = (event) => {
+      shake.current = {
+        intensity: event.intensity || 1,
+        duration: event.duration || 0.6,
+        elapsed: 0,
+      };
+    };
+    engine.on("blackHoleEngulfment", handleEngulfment);
+    return () => engine.off("blackHoleEngulfment", handleEngulfment);
+  }, [engine]);
+
   useEffect(() => {
     moving.current = true;
     focused.current = selectedId;
@@ -854,6 +957,21 @@ function CameraController({
   useFrame((_, dt) => {
     const orbit = controls.current;
     if (!orbit) return;
+
+    // Apply screen shake
+    if (shake.current.elapsed < shake.current.duration) {
+      shake.current.elapsed += dt;
+      const progress = shake.current.elapsed / shake.current.duration;
+      const decay = Math.cos(progress * Math.PI) * 0.5; // Fade out over time
+      const intensity = shake.current.intensity * decay;
+
+      const shakeX = (Math.random() - 0.5) * intensity * 0.02;
+      const shakeY = (Math.random() - 0.5) * intensity * 0.02;
+      const shakeZ = (Math.random() - 0.5) * intensity * 0.01;
+
+      camera.position.add(new THREE.Vector3(shakeX, shakeY, shakeZ));
+    }
+
     const body = engine.getBody(selectedId);
     if (body) {
       target.current.set(...bodyPosition(body, engine, settings.compressed));
