@@ -565,80 +565,98 @@ function EarthLayers({ radius, body, engine, settings }) {
 }
 
 function BlackHoleVisual({ body, radius, settings, engine }) {
-  const group = useRef();
-
-  const blackHoleTexture = useMemo(() => {
-    const loader = new THREE.TextureLoader();
-
-    const texture = loader.load(
-      "/textures/blackhole-nasa.png"
-    );
-
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 8;
-    texture.needsUpdate = true;
-
-    return texture;
-  }, []);
-
-  /*
-   * NASA black-hole visualization.
-   *
-   * IMPORTANT:
-   *
-   * `radius` is the VISUAL radius returned by visualRadius().
-   *
-   * It is deliberately independent from the physical
-   * Schwarzschild radius used by the physics engine.
-   */
-
-  const visualWidth = radius * 3.65;
-  const visualHeight = radius * 2.05;
-
+  const ref = useRef(),
+    reduced = usePrefersReducedMotion(),
+    galaxy = useSafeTexture("galaxy");
+  const uniforms = useMemo(
+    () => ({
+      sky: { value: galaxy },
+      strength: {
+        value:
+          engine.calculateGravitationalLensing(
+            body,
+            engine.schwarzschildRadius(body.mass) * 6,
+          ) * 0.16,
+      },
+      tick: { value: 0 },
+    }),
+    [galaxy, body, engine],
+  );
+  const dragRate = Math.min(
+    0.6,
+    Math.log1p(
+      Math.abs(
+        engine.calculateFrameDragging(
+          body,
+          engine.schwarzschildRadius(body.mass) * 5,
+        ),
+      ),
+    ) * 0.015,
+  );
+  useFrame((_, dt) => {
+    if (ref.current && !reduced)
+      ref.current.rotation.z +=
+        dt * (settings.frameDragging ? 0.04 + dragRate : 0.04);
+    if (!reduced) uniforms.tick.value += dt;
+  });
+  // Background-only lensing impostor: sample the actual Milky Way map with a
+  // radial deflection. This is an artistic screen-aligned approximation, not GR.
   return (
-    <group ref={group}>
-
-      {/* NASA black-hole visualization */}
+    <>
+      <mesh>
+        <sphereGeometry args={[radius, 48, 32]} />
+        <meshBasicMaterial color="#000003" />
+      </mesh>
+      {settings.lensing && settings.quality !== "low" && galaxy && (
+        <Billboard>
+          <mesh scale={radius * 3.5}>
+            <planeGeometry args={[2, 2]} />
+            <shaderMaterial
+              transparent
+              depthWrite={false}
+              uniforms={uniforms}
+              vertexShader={glowVertex}
+              fragmentShader={`varying vec2 vUv;uniform sampler2D sky;uniform float strength;uniform float tick;void main(){vec2 p=vUv-.5;float r=length(p);vec2 warp=p*(1.+strength/max(.015,r*r));vec3 c=texture2D(sky,vec2(atan(warp.y,warp.x)/6.283+.5+tick*.002,length(warp)*.5)).rgb;float a=smoothstep(.14,.19,r)*(1.-smoothstep(.3,.49,r));gl_FragColor=vec4(c*1.5,a*.75);}`}
+            />
+          </mesh>
+        </Billboard>
+      )}
+      <group rotation={[0.2, 0, 0.24]}>
+        <group ref={ref} rotation={[-Math.PI / 2, 0, 0]}>
+          {Array.from({ length: 9 }, (_, i) => (
+            <mesh key={i}>
+              <ringGeometry
+                args={[
+                  radius * (1.55 + i * 0.17),
+                  radius * (1.64 + i * 0.17),
+                  96,
+                  1,
+                  i * 0.4,
+                  TAU - 0.2,
+                ]}
+              />
+              <meshBasicMaterial
+                color={i < 3 ? "#ffe5b7" : "#d98652"}
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.8 - i * 0.065}
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+              />
+            </mesh>
+          ))}
+        </group>
+      </group>
       <Billboard>
-        <mesh
-          scale={[
-            visualWidth,
-            visualHeight,
-            1
-          ]}
-        >
-          <planeGeometry args={[2, 2]} />
-
-          <meshBasicMaterial
-            map={blackHoleTexture}
-            transparent={true}
-            opacity={1}
-            depthWrite={false}
-            depthTest={false}
-            toneMapped={false}
-            side={THREE.DoubleSide}
-          />
+        <mesh>
+          <torusGeometry args={[radius * 1.12, radius * 0.025, 8, 96]} />
+          <meshBasicMaterial color="#fff0d3" />
         </mesh>
       </Billboard>
-
-      {/* Physical event-horizon core.
-          This sits underneath the transparent NASA image. */}
-      <mesh>
-        <sphereGeometry
-          args={[
-            radius * 0.30,
-            64,
-            48
-          ]}
-        />
-
-        <meshBasicMaterial
-          color="#000000"
-          toneMapped={false}
-        />
-      </mesh>
-
-    </group>
+      {settings.quality !== "low" && (
+        <Glow size={radius * 3.5} color="#ac6131" opacity={0.24} />
+      )}
+    </>
   );
 }
 
