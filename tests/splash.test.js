@@ -46,3 +46,4 @@ test("splash textures exist and are non-empty", () => {
   assert.ok(fs.statSync(img2).size > 1000, "images-2.jpeg should be valid image");
   assert.ok(fs.statSync(img4).size > 1000, "images-4.jpeg should be valid image");
 });
+
