@@ -163,6 +163,8 @@ export {
 
 import { PhysicsWorkerClient } from "./worker/PhysicsWorkerClient.js";
 export { PhysicsWorkerClient };
+export { solarRadiusToAU, auToSolarRadii } from "./constants.js";
+export { blackbodyColor, stellarLuminosity } from "./stellar.js";
 
 export class PhysicsEngine {
   constructor(options = {}) {
@@ -172,18 +174,18 @@ export class PhysicsEngine {
     // 0.04 yr/s ≈ 14.6 days per real second; UI states this explicitly.
     this.timeScale = 0.04;
     this.gravityMultiplier = 1;
-    this.fixedDt = options.fixedDt || 1 / 32768;
-    this.maxSubsteps = options.maxSubsteps || 128;
+    this.fixedDt = clamp(finite(options.fixedDt, 1 / 32768), 1 / 2097152, 1 / 32768);
+    this.maxSubsteps = clamp(Math.floor(finite(options.maxSubsteps, 128)), 1, 128);
     this.softening = 1e-8;
-    this.maxBodies = options.maxBodies || 128;
+    this.maxBodies = clamp(Math.floor(finite(options.maxBodies, 128)), 1, 128);
     this.accumulator = 0;
     this.droppedTime = 0;
     this.lastSubsteps = 0;
     this.events = new Map();
     this.history = [];
     this.historyIndex = -1;
-    this.historyLimit = options.historyLimit || 160;
-    this.historyInterval = options.historyInterval || 0.01;
+    this.historyLimit = clamp(Math.floor(finite(options.historyLimit, 160)), 1, 160);
+    this.historyInterval = Math.max(this.fixedDt, finite(options.historyInterval, 0.01));
     this.lastHistoryTime = 0;
     this.branches = new Map();
     this.settings = {
@@ -249,6 +251,10 @@ export class PhysicsEngine {
     const body = this.getBody(id);
     if (!body) return false;
     this.bodies.splice(this.bodies.indexOf(body), 1);
+    for (const other of this.bodies) {
+      for (const key of ["primaryId", "tidalPrimaryId", "nearestStarId"])
+        if (other.metadata[key] === body.id) delete other.metadata[key];
+    }
     this.emit("bodyRemoved", { body });
     return true;
   }
@@ -287,6 +293,11 @@ export class PhysicsEngine {
     b.position.copy(b._previous || new Vector3());
     b.velocity.set(0, 0, 0);
     b.acceleration.set(0, 0, 0);
+    b.mass = clamp(finite(b.mass, 1e-20), 1e-20, 1e9);
+    b.radius = clamp(finite(b.radius, 1e-12), 1e-12, 1e5);
+    b.rotation.set(0, 0, 0);
+    b.angularVelocity.set(0, 0, 0);
+    b.recalculateDensity();
     b.enabled = false;
     this.pause();
     this.emit("numericalWarning", {
@@ -340,6 +351,7 @@ export class PhysicsEngine {
           x * x + y * y + z * z + soft2 + (soft ? soft * soft : 0),
           1e-18,
         );
+        if (!Number.isFinite(r2)) continue; // Overflowing separations exert negligible force.
         const r = Math.sqrt(r2);
         let f = effectiveG / (r2 * r);
 
@@ -367,6 +379,8 @@ export class PhysicsEngine {
     for (const b of this.bodies) {
       if (!b.active || !b.enabled) continue;
       if (
+        !Number.isFinite(b.mass) || b.mass <= 0 ||
+        !Number.isFinite(b.radius) || b.radius <= 0 ||
         !Number.isFinite(b.position.x) ||
         !Number.isFinite(b.position.y) ||
         !Number.isFinite(b.position.z) ||
@@ -435,10 +449,10 @@ export class PhysicsEngine {
     this.lastSubsteps = 0;
     while (
       this.accumulator >= this.fixedDt &&
-      this.lastSubsteps < this.maxSubsteps
+      this.lastSubsteps < this.maxSubsteps && !this.paused
     ) {
       this.step();
-      this.accumulator -= this.fixedDt;
+      this.accumulator = Math.max(0, this.accumulator - this.fixedDt);
       this.lastSubsteps++;
     }
   }
@@ -448,22 +462,46 @@ export class PhysicsEngine {
   }
   handlePortalsAndCaptures() {
     for (const source of [...this.bodies]) {
-      if (!source.enabled || !source.active) continue;
+      if (!source.enabled || !source.active || !this.bodies.includes(source)) continue;
       if (source.type === "black hole") {
-        const horizon = this.schwarzschildRadius(source.mass);
-        for (const b of [...this.bodies])
+        const rs = this.schwarzschildRadius(source.mass);
+        const sandboxCapture = finite(source.metadata.captureRadiusAU);
+        const plungeRadius = this.settings.relativityEnabled ? 4 * rs : rs;
+        for (const b of [...this.bodies]) {
           if (
-            b !== source &&
-            b.active &&
-            b.enabled &&
-            b.type !== "wormhole" &&
-            this.closestApproach(source, b) <= horizon &&
-            this.getBody(b.id)
-          ) {
-            this.emit("eventHorizonCrossed", { body: b, primary: source });
+            b === source ||
+            !b.active ||
+            !b.enabled ||
+            b.type === "wormhole" ||
+            !this.getBody(b.id)
+          )
+            continue;
+
+          const d = this.closestApproach(source, b);
+          const contactRadius = rs + (this.gravityMultiplier > 0 ? b.radius : 0);
+          const isPhysical = d <= Math.max(rs, plungeRadius);
+          const isContact = d <= contactRadius;
+          const isSandbox = sandboxCapture > 0 && d <= sandboxCapture;
+
+          if (isPhysical || isContact || isSandbox) {
+            this.emit(isPhysical ? "eventHorizonCrossed" : "captureRegionEntered", { body: b, primary: source });
             this.mergeBodies(source, b, 0);
             this.emit("bodyCaptured", { body: b, primary: source });
+            continue;
           }
+
+          if (
+            this.settings.tides &&
+            this.gravityMultiplier > 0 &&
+            !b.metadata.fragment &&
+            (b.metadata.collisionCooldown || 0) < this.time
+          ) {
+            const roche = this.calculateRocheLimit(source, b, true);
+            if (d <= roche) {
+              this.applyTidalDisruption(b, source);
+            }
+          }
+        }
       }
       if (source.type === "wormhole") {
         const target = this.bodies.find(
@@ -503,6 +541,7 @@ export class PhysicsEngine {
         consumed.has(a.id) ||
         !a.active ||
         !a.enabled ||
+        a.type === "black hole" ||
         a.collisionMode === "ignore" ||
         (a.metadata.collisionCooldown || 0) > this.time
       )
@@ -513,6 +552,7 @@ export class PhysicsEngine {
           consumed.has(b.id) ||
           !b.active ||
           !b.enabled ||
+          b.type === "black hole" ||
           b.collisionMode === "ignore" ||
           (b.metadata.collisionCooldown || 0) > this.time
         )
@@ -532,6 +572,8 @@ export class PhysicsEngine {
         }
         const outcome = calculateCollisionOutcome(a, b, this.gravityMultiplier);
         this.mergeBodies(outcome.survivor, outcome.victim, outcome.fraction);
+        if (outcome.catastrophic && outcome.survivor.metadata.lastEjectMass > 0)
+          this.emit("catastrophicDisruption", { body: outcome.survivor, energyRatio: outcome.ratio });
         consumed.add(outcome.victim.id);
         // Each body resolves at most one impact per step to avoid stale-pair cascades.
         consumed.add(outcome.survivor.id);
@@ -571,14 +613,20 @@ export class PhysicsEngine {
       0.5 *
       solarMassesToKg((a.mass * b.mass) / total) *
       auPerYearToMS(speed) ** 2;
-    let ejectMass = total * ejectFraction;
-    if (this.bodies.length + 7 > this.maxBodies) ejectMass = 0;
+    let ejectMass = total * clamp(finite(ejectFraction), 0, 0.9);
+    if (this.maxBodies - this.bodies.length + 1 < 2) ejectMass = 0;
+    if (ejectMass < 2e-20) ejectMass = 0;
+    // Preserve the mass-weighted swept trajectory for subsequent captures this step.
+    const previous = (a._previous || a.position).clone().multiplyScalar(a.mass)
+      .addScaledVector(b._previous || b.position, b.mass).divideScalar(total);
     a.mass = total - ejectMass;
     a.radius =
       a.type === "black hole"
         ? this.schwarzschildRadius(a.mass)
         : Math.cbrt(((a.radius ** 3 + b.radius ** 3) * a.mass) / total);
     a.position.copy(center);
+    a._previous = previous;
+    a.metadata.lastEjectMass = ejectMass;
     a.velocity.copy(velocity);
     a.angularVelocity.copy(L).divideScalar(0.4 * a.mass * a.radius ** 2);
     a.metadata.impactHeatJ = heat;
@@ -641,9 +689,9 @@ export class PhysicsEngine {
   calculateTidalEffects(body, primary) {
     return calculateTidalEffects(body, primary, this.gravityMultiplier);
   }
-  applyTidalDisruption(id) {
+  applyTidalDisruption(id, primary = null) {
     const body = typeof id === "object" ? id : this.getBody(id);
-    if (!body || this.bodies.length + 7 > this.maxBodies) return [];
+    if (!body || body.mass < 8e-20 || this.bodies.length + 7 > this.maxBodies) return [];
     this.removeBody(body.id);
     const fragments = this.generateDebris(
       body,
@@ -652,6 +700,14 @@ export class PhysicsEngine {
       8,
       3,
     );
+    // Symmetric leading/trailing stream along the primary-secondary direction.
+    // Collinear displacement/velocity adds no orbital angular momentum.
+    const axis = primary ? body.position.clone().sub(primary.position).normalize() : new Vector3(1, 0, 0);
+    fragments.forEach((fragment, index) => {
+      const offset = (index - (fragments.length - 1) / 2) * body.radius * 1.2;
+      fragment.position.copy(body.position).addScaledVector(axis, offset);
+      fragment.velocity.copy(body.velocity).addScaledVector(axis, offset / body.radius * body.escapeVelocity() * 0.08);
+    });
     distributeDisruptionSpin(body, fragments);
     this.emit("tidalDisruption", {
       body,
@@ -662,6 +718,10 @@ export class PhysicsEngine {
   }
   schwarzschildRadius(mass) {
     return schwarzschildRadius(mass);
+  }
+  captureRadius(body) {
+    // Optional AU sandbox threshold, independent of the physical event horizon.
+    return Math.max(this.schwarzschildRadius(body.mass), finite(body.metadata.captureRadiusAU));
   }
   calculateRelativity(body, primary) {
     return calculateRelativity(body, primary);
@@ -746,7 +806,7 @@ export class PhysicsEngine {
               body.composition.some((c) => /iron|nickel/i.test(c)))
           ) {
             // Toy magnetic acceleration falls as r^-3, bounded for numerical stability.
-            const strength = Math.min(5, 0.000001 / Math.max(d ** 3, 1e-12));
+            const strength = Math.min(5, 0.000001 * (primary.metadata.magneticFieldStrength ?? 1e10) / 1e10 / Math.max(d ** 3, 1e-12));
             body.velocity.addScaledVector(
               body.position.clone().sub(primary.position).normalize(),
               strength * dt,
@@ -770,6 +830,10 @@ export class PhysicsEngine {
           2,
           body.metadata.cometActivity * 0.4,
         );
+      } else if (body.type === "comet") {
+        delete body.metadata.nearestStarId;
+        body.metadata.tailLength = 0;
+        body.metadata.cometActivity = 0;
       }
       if (strongest && this.settings.tides) {
         body.metadata.tidalStress = strongest.stressRatio;
@@ -778,12 +842,13 @@ export class PhysicsEngine {
         body.metadata.tidalPrimaryId = strongest.primaryId;
         if (
           strongest.distance < strongest.rocheLimit &&
+          !body.metadata.fragment &&
           !body.metadata.rocheWarned
         ) {
           this.emit("rocheLimitBreach", { body, ...strongest });
           body.metadata.rocheWarned = true;
         }
-        if (strongest.stressRatio > 0.1 && !body.metadata.tidalWarned) {
+        if (strongest.stressRatio > 0.1 && !body.metadata.fragment && !body.metadata.tidalWarned) {
           this.emit("tidalStress", { body, ...strongest });
           body.metadata.tidalWarned = true;
         }
@@ -792,7 +857,7 @@ export class PhysicsEngine {
           !body.metadata.fragment &&
           (body.metadata.collisionCooldown || 0) < this.time
         )
-          this.applyTidalDisruption(body);
+          this.applyTidalDisruption(body, this.getBody(strongest.primaryId));
       } else {
         body.metadata.tidalStretch = 1;
         body.metadata.tidalStress = 0;
@@ -946,7 +1011,7 @@ export class PhysicsEngine {
     const ids = new Set();
     for (const b of state.bodies) {
       if (
-        !b.id ||
+        !b || typeof b.id !== "string" || !b.id ||
         ids.has(b.id) ||
         !Number.isFinite(b.mass) ||
         b.mass <= 0 ||
@@ -1079,6 +1144,7 @@ export class PhysicsEngine {
         this.spawnBody("star", {
           name: `${count === 3 ? "Trinary" : "Binary"} ${i + 1}`,
           mass,
+          ...stellarModel(mass),
           position: Vector3.from(center).add(
             new Vector3(Math.cos(theta) * radius, 0, Math.sin(theta) * radius),
           ),
