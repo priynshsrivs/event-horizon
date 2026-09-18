@@ -112,6 +112,34 @@ export {
   calculateFrameDragging,
 };
 
+import {
+  calculateRadiation,
+  calculateEquilibriumTemperature,
+  calculateHabitableZone,
+  atmosphericRetention,
+  classifyExoplanet,
+} from "./radiation.js";
+
+export {
+  calculateRadiation,
+  calculateEquilibriumTemperature,
+  calculateHabitableZone,
+  atmosphericRetention,
+  classifyExoplanet,
+};
+
+import {
+  stellarModel,
+  createFlareData,
+  calculateSupernovaParameters,
+} from "./stellar.js";
+
+export {
+  stellarModel,
+  createFlareData,
+  calculateSupernovaParameters,
+};
+
 export class PhysicsEngine {
   constructor(options = {}) {
     this.bodies = [];
@@ -581,79 +609,22 @@ export class PhysicsEngine {
     return calculateFrameDragging(body, distance);
   }
   calculateRadiation(body) {
-    let flux = 0;
-    for (const star of this.bodies)
-      if (star !== body && star.enabled && star.active && star.luminosity > 0)
-        flux +=
-          (star.luminosity * SOLAR_LUMINOSITY_W) /
-          (4 *
-            Math.PI *
-            auToMeters(
-              Math.max(star.radius, star.position.distanceTo(body.position)),
-            ) **
-              2);
-    return { flux, earthRelative: flux / 1361 };
+    return calculateRadiation(body, this.bodies);
   }
   calculateEquilibriumTemperature(body) {
-    return Math.pow(
-      (this.calculateRadiation(body).flux * (1 - body.albedo)) /
-        (4 * 5.670374419e-8 * body.emissivity),
-      0.25,
-    );
+    return calculateEquilibriumTemperature(body, this.bodies);
   }
   calculateHabitableZone(star) {
-    return {
-      inner: Math.sqrt(star.luminosity / 1.1),
-      outer: Math.sqrt(star.luminosity / 0.53),
-    };
+    return calculateHabitableZone(star);
   }
   atmosphericRetention(body, molecularMassAMU = 28) {
-    const thermalSpeed = Math.sqrt(
-      (3 * 1.380649e-23 * body.temperature) /
-        (molecularMassAMU * 1.6605390666e-27),
-    );
-    const ratio =
-      auPerYearToMS(body.escapeVelocity()) / Math.max(thermalSpeed, 1);
-    return { thermalSpeed, escapeRatio: ratio, likelyRetained: ratio > 6 };
+    return atmosphericRetention(body, molecularMassAMU);
   }
   classifyExoplanet(body) {
-    const m = solarMassesToKg(body.mass) / EARTH_MASS_KG;
-    return m > 50
-      ? "Gas giant"
-      : m > 10
-        ? "Ice giant / mini-Neptune"
-        : m > 2
-          ? "Super-Earth"
-          : "Terrestrial / rocky";
+    return classifyExoplanet(body);
   }
   stellarModel(mass) {
-    const luminosity =
-      mass < 0.43
-        ? 0.23 * mass ** 2.3
-        : mass < 2
-          ? mass ** 4
-          : 1.5 * mass ** 3.5;
-    const radius = (mass ** 0.8 * SOLAR_RADIUS_M) / AU_M,
-      temperature = 5772 * (luminosity / mass ** 1.6) ** 0.25;
-    return {
-      luminosity,
-      radius,
-      temperature,
-      spectralType:
-        temperature > 30000
-          ? "O"
-          : temperature > 10000
-            ? "B"
-            : temperature > 7500
-              ? "A"
-              : temperature > 6000
-                ? "F"
-                : temperature > 5200
-                  ? "G"
-                  : temperature > 3700
-                    ? "K"
-                    : "M",
-    };
+    return stellarModel(mass);
   }
   updateEnvironment(dt) {
     const sources = this.bodies.filter((b) => b.enabled && b.active);
@@ -767,22 +738,12 @@ export class PhysicsEngine {
   triggerSolarFlare(id = "Sun", options = {}) {
     const star = this.getBody(id);
     if (!star || !isStar(star)) return null;
-    const duration = clamp(finite(options.durationYears, 0.004), 0.00001, 1),
-      intensity = clamp(finite(options.intensity, 1), 0.1, 10);
-    const flare = {
-      id: `flare-${star.id}-${this.time}-${this.random()}`,
-      starId: star.id,
-      startTime: this.time,
-      endTime: this.time + duration,
-      duration,
-      intensity,
-      energy: 1e25 * intensity,
-      direction: [
-        this.random() - 0.5,
-        this.random() - 0.5,
-        this.random() - 0.5,
-      ],
-    };
+    const { flare, intensity } = createFlareData(
+      star,
+      options,
+      this.time,
+      () => this.random(),
+    );
     Object.assign(star.metadata, {
       activeSolarFlare: flare,
       lastSolarFlare: this.time,
@@ -805,13 +766,12 @@ export class PhysicsEngine {
     if (!star || !isStar(star)) return null;
     if (this.bodies.length + 12 > this.maxBodies)
       throw new Error("Supernova needs room for 12 ejecta bodies.");
-    const mass = star.mass,
-      retained = mass > 20 ? mass * 0.3 : mass * 0.2,
-      type = mass > 20 ? "black hole" : "neutron star";
+    const { retainedMass, remnantType, ejectaMass } =
+      calculateSupernovaParameters(star);
     this.removeBody(star.id);
-    const remnant = this.spawnBody(type, {
+    const remnant = this.spawnBody(remnantType, {
       name: `${star.name} remnant`,
-      mass: retained,
+      mass: retainedMass,
       position: star.position,
       velocity: star.velocity,
       metadata: { collisionCooldown: this.time + 0.01 },
@@ -825,7 +785,7 @@ export class PhysicsEngine {
     shellSource.radius = Math.max(star.radius, 0.01);
     const ejecta = this.generateDebris(
       shellSource,
-      mass - retained,
+      ejectaMass,
       msToAUPerYear(1e6),
       12,
       3,
