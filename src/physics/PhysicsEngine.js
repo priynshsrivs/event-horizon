@@ -197,6 +197,10 @@ export class CelestialBody {
       if (key in this.metadata && typeof this.metadata[key] !== "string")
         delete this.metadata[key];
     this.recalculateDensity();
+    // Store base properties for dynamic scaling
+    this._baseRadius = this.radius;
+    this._baseMass = this.mass;
+    this._scaleFactor = 1;
   }
   calculateDensity() {
     return (
@@ -207,6 +211,31 @@ export class CelestialBody {
   recalculateDensity() {
     this.density = this.calculateDensity();
     return this.density;
+  }
+
+  // Dynamic scaling system
+  setScale(scaleFactor) {
+    if (!Number.isFinite(scaleFactor) || scaleFactor <= 0) return this;
+    this._scaleFactor = scaleFactor;
+
+    if (this.type === "black hole") {
+      // For black holes, scale mass based on Schwarzschild radius
+      // R_s = 2GM/c^2 => M = R_s * c^2 / (2G)
+      const newRadius = this._baseRadius * scaleFactor;
+      this.radius = newRadius;
+      this.mass = (newRadius * AU_M * C_M_PER_S ** 2) / (2 * G_SI * SOLAR_MASS_KG);
+    } else {
+      // For other objects, scale radius linearly and mass by cube (constant density)
+      this.radius = this._baseRadius * scaleFactor;
+      this.mass = this._baseMass * Math.pow(scaleFactor, 3);
+    }
+
+    this.recalculateDensity();
+    return this;
+  }
+
+  getScale() {
+    return this._scaleFactor;
   }
   escapeVelocity() {
     return Math.sqrt((2 * G * this.mass) / this.radius);
@@ -408,13 +437,73 @@ export class PhysicsEngine {
   }
   spawnBody(type = "planet", overrides = {}) {
     const preset = BODY_PRESETS[type] || BODY_PRESETS.planet;
-    return this.addBody({
+    const body = this.addBody({
       ...preset,
       ...overrides,
       type,
       name: overrides.name || type.replace(/\b\w/g, (x) => x.toUpperCase()),
       metadata: { ...preset.metadata, ...overrides.metadata },
     });
+
+    // Apply type-specific spawn physics
+    this.applySpawnPhysics(body);
+    return body;
+  }
+
+  applySpawnPhysics(body) {
+    // Find nearest star for orbital calculations
+    const stars = this.bodies.filter((b) => isStar(b) && b !== body);
+    if (stars.length === 0) return;
+
+    const nearestStar = stars.sort(
+      (a, b) => body.position.distanceTo(a.position) - body.position.distanceTo(b.position)
+    )[0];
+
+    const r = body.position.clone().sub(nearestStar.position);
+    const distance = r.length();
+    if (distance < 0.001) return;
+
+    const radialDir = r.clone().normalize();
+    const tangentDir = new Vector3(-radialDir.z, 0, radialDir.x).normalize();
+    const mu = G * this.gravityMultiplier * nearestStar.mass;
+
+    // Type-specific spawn behaviors
+    switch (body.type) {
+      case "planet":
+        // Planets default to circular Keplerian orbit
+        if (body.velocity.length() < 0.001) {
+          const vOrbit = Math.sqrt(mu / distance);
+          body.velocity.copy(tangentDir).multiplyScalar(vOrbit * 0.98);
+        }
+        break;
+
+      case "comet":
+        // Comets spawn with high eccentricity trajectory
+        if (body.velocity.length() < 0.001) {
+          const vEscape = Math.sqrt(2 * mu / distance);
+          body.velocity.copy(tangentDir).multiplyScalar(vEscape * 0.65);
+        }
+        break;
+
+      case "rogue planet":
+        // Rogue planets keep user velocity (hyperbolic unless captured)
+        break;
+
+      case "asteroid":
+        // Asteroids get minimal velocity boost
+        body.velocity.multiplyScalar(0.3);
+        break;
+
+      case "brown dwarf":
+      case "neutron star":
+      case "white dwarf":
+        // Stellar remnants get stable orbital velocity
+        if (body.velocity.length() < 0.001) {
+          const vOrbit = Math.sqrt(mu / distance);
+          body.velocity.copy(tangentDir).multiplyScalar(vOrbit * 0.85);
+        }
+        break;
+    }
   }
   getBody(id) {
     return this.bodies.find((b) => b.id === id || b.name === id);
@@ -676,8 +765,14 @@ export class PhysicsEngine {
           (b.metadata.collisionCooldown || 0) > this.time
         )
           continue;
-        if (this.closestApproach(a, b) > a.radius + b.radius) continue;
+
+        // Strict distance-based collision: only when surfaces touch
+        const minDistance = a.radius + b.radius;
+        if (this.closestApproach(a, b) > minDistance) continue;
+
         this.emit("collision", { a, b, position: a.position.clone() });
+
+        // Handle collision based on collision modes
         if (a.collisionMode === "destroy" || b.collisionMode === "destroy") {
           this.removeBody(a.id);
           this.removeBody(b.id);
