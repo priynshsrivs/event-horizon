@@ -12,6 +12,8 @@ import Universe from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
 import { playTone } from "./ui/audio.js";
+import { readPreferences, writePreferences } from "./ui/preferences.js";
+import SplashScreen from "./SplashScreen.jsx";
 
 const DEFAULT_SETTINGS = {
   orbits: true,
@@ -36,6 +38,8 @@ const eventLabels = {
   collision: "Impact detected",
   bodyMerged: "Bodies accreted",
   partialAccretion: "Ejecta released",
+  catastrophicDisruption: "Catastrophic disruption",
+  captureRegionEntered: "Simulation capture region entered",
   tidalDisruption: "Tidal disruption",
   eventHorizonCrossed: "Event horizon crossed",
   solarFlare: "Stellar flare",
@@ -295,6 +299,7 @@ function PlanetInfo({ body, engine, onClose, onEdit }) {
                   : "Not defined at horizon"
               }
             />
+            {body.type === "black hole" && <Metric label="Simulation capture radius" value={fmt(engine.captureRadius(body) * AU_M / 1000)} unit="km" />}
             <Metric
               label="Universe time"
               value={fmt(engine.time, 5)}
@@ -334,6 +339,7 @@ function BodyEditor({ body, engine, onChange, notify }) {
       charge: String(body.charge),
       composition: body.composition.join(", "),
       collisionMode: body.collisionMode,
+      captureRadius: String(body.metadata.captureRadiusAU || 0),
     });
   }, [body.id]);
   const edit = (key) => (e) =>
@@ -352,6 +358,7 @@ function BodyEditor({ body, engine, onChange, notify }) {
       "vy",
       "vz",
       "charge",
+      "captureRadius",
     ];
     if (
       keys.some(
@@ -369,7 +376,6 @@ function BodyEditor({ body, engine, onChange, notify }) {
       );
       return;
     }
-    engine.checkpoint();
     engine.updateBody(body.id, {
       mass: +values.mass,
       radius: (+values.radius * 1000) / AU_M,
@@ -389,6 +395,7 @@ function BodyEditor({ body, engine, onChange, notify }) {
         .map((x) => x.trim())
         .filter(Boolean),
       collisionMode: values.collisionMode,
+      metadata: { captureRadiusAU: Math.max(0, +values.captureRadius) },
     });
     engine.checkpoint();
     onChange();
@@ -469,6 +476,10 @@ function BodyEditor({ body, engine, onChange, notify }) {
           ))}
         </select>
       </label>
+      {body.type === "black hole" && <label>Simulation capture radius · AU
+        <input aria-label="Simulation capture radius · AU" type="number" min="0" step="any" value={values.captureRadius ?? "0"} onChange={edit("captureRadius")} />
+        <small>0 uses the physical horizon. An enlarged threshold is a sandbox approximation.</small>
+      </label>}
       <button className="button primary full" type="submit">
         Apply properties
       </button>
@@ -524,28 +535,31 @@ function GodPanel({
             }
           />
         </label>
-        {engine.getBody("sun") && (
-          <label className="range-label">
-            Sun mass <output>{fmt(engine.getBody("sun").mass, 2)} M☉</output>
-            <input
-              aria-label="Sun mass"
-              type="range"
-              min="0.1"
-              max="5"
-              step="0.05"
-              value={engine.getBody("sun").mass}
-              onChange={(e) =>
-                act(() => {
-                  const mass = +e.target.value;
-                  engine.updateBody("sun", {
-                    mass,
-                    luminosity: engine.stellarModel(mass).luminosity,
-                  });
-                })
-              }
-            />
-          </label>
-        )}
+        {(() => {
+          const sun = engine.getBody("sun") || engine.getBody("Sun");
+          return sun ? (
+            <label className="range-label">
+              Sun mass <output>{fmt(sun.mass, 2)} M☉</output>
+              <input
+                aria-label="Sun mass"
+                type="range"
+                min="0.1"
+                max="5"
+                step="0.05"
+                value={sun.mass}
+                onChange={(e) =>
+                  act(() => {
+                    const mass = +e.target.value;
+                    engine.updateBody(sun.id, {
+                      mass,
+                      ...engine.stellarModel(mass),
+                    });
+                  })
+                }
+              />
+            </label>
+          ) : null;
+        })()}
       </section>
       <section className="panel-section">
         <h3>
@@ -1000,7 +1014,8 @@ export default function App() {
   });
   const [selectedId, setSelectedId] = useState(null),
     [panel, setPanel] = useState(null),
-    [settings, setSettings] = useState(DEFAULT_SETTINGS);
+    [settings, setSettings] = useState(() => readPreferences(DEFAULT_SETTINGS));
+  useEffect(() => { writePreferences(settings); }, [settings]);
   const [homeToken, setHomeToken] = useState(0),
     [sceneRevision, setSceneRevision] = useState(0),
     [, refresh] = useState(0);
@@ -1013,6 +1028,7 @@ export default function App() {
     [samples, setSamples] = useState([]),
     [fps, setFps] = useState(0);
   const [showSettings, setShowSettings] = useState(false),
+    [showSplash, setShowSplash] = useState(true),
     [showObjects, setShowObjects] = useState(true),
     [hint, setHint] = useState(() => {
       try {
@@ -1138,7 +1154,11 @@ export default function App() {
   const place = useCallback(
     (type, position, velocity) => {
       act(() => {
-        const body = engine.spawnBody(type, { position, velocity });
+        const overrides = { position, velocity };
+        if (type === "black hole") {
+          overrides.metadata = { captureRadiusAU: 0.05 };
+        }
+        const body = engine.spawnBody(type, overrides);
         setSelectedId(body.id);
         notify(`${body.name} created · resume to launch`);
       });
@@ -1355,6 +1375,7 @@ export default function App() {
         />
       </RenderBoundary>
       <div className="vignette" />
+      {showSplash && <SplashScreen onDismiss={() => setShowSplash(false)} />}
       <header className="topbar">
         <a
           className="brand"
@@ -1381,6 +1402,14 @@ export default function App() {
             {fps || "—"} <small>FPS</small>
           </span>
           <button
+            className={`icon-button ${showSplash ? "active" : ""}`}
+            title="Mission Landing / Overview"
+            aria-label="Mission Landing / Overview"
+            onClick={() => setShowSplash((v) => !v)}
+          >
+            <Icon name="info" />
+          </button>
+          <button
             className={`icon-button ${settings.sound ? "active" : ""}`}
             title={settings.sound ? "Mute sound" : "Enable sound"}
             aria-label={settings.sound ? "Mute sound" : "Enable sound"}
@@ -1403,21 +1432,21 @@ export default function App() {
       </header>
       <div className="observation">
         <span className="eyebrow">
-          OBSERVATORY / {storyRef.current.active ? "ORIGINS" : "SOL SYSTEM"}
+          OBSERVATORY / {storyRef.current.active ? "ORIGINS" : engine.getBody("sun") ? "SOL SYSTEM" : "SANDBOX"}
         </span>
         <h1>
           {storyRef.current.active
             ? "A cosmic story."
             : selected
               ? selected.name
-              : "Our solar system."}
+              : engine.getBody("sun") ? "Our solar system." : "Your experiment."}
         </h1>
         <p>
           {storyRef.current.active
             ? "From the first light to your next experiment."
             : selected
               ? "A closer look at our celestial neighborhood."
-              : "One star. Eight planets. Infinite possibilities."}
+              : engine.getBody("sun") ? "One star. Eight planets. Infinite possibilities." : "Explore gravity, matter and light."}
         </p>
       </div>
       <nav className="object-browser" aria-label="Celestial bodies">
@@ -1610,6 +1639,8 @@ export default function App() {
           </label>
           <div className="panel-section">
             <h3>Reading this universe</h3>
+            <button className="button full" onClick={() => setSettings({ ...DEFAULT_SETTINGS })}>Reset saved preferences</button>
+            <p className="fine-print">View, graphics and audio preferences save locally. Experiments and branches require JSON export.</p>
             <p className="fine-print">
               Body sizes are exaggerated in every view. Atlas mode also
               compresses interplanetary distances and enlarges Moon separation.
@@ -1683,7 +1714,7 @@ export default function App() {
                 setHint(false);
                 try {
                   localStorage.setItem("eh-onboarded", "1");
-                } catch {}
+                } catch { /* Storage may be unavailable in private browsing. */ }
               }}
             >
               <Icon name="close" size={12} />

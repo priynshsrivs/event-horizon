@@ -4,7 +4,7 @@ An interactive 3D universe laboratory built with React, Three.js and an independ
 
 ## Run
 
-Requires Node.js **20.19+ or 22.12+** (developed with Node 24.18.0).
+Requires Node.js **22.12+** (developed with Node 24.18.0).
 
 ```sh
 npm install
@@ -22,6 +22,8 @@ Run the numerical and scenario checks with:
 
 ```sh
 npm test
+npm run lint
+npm run benchmark
 ```
 
 The checked-in lockfile fixes compatible versions: React/React DOM 19.2.8, Three.js 0.186.0, Fiber 9.7.0, Drei 10.7.8 and Vite 8.3.0. Fiber's React peer range excludes React 19.3, so do not upgrade React alone.
@@ -35,7 +37,7 @@ The checked-in lockfile fixes compatible versions: React/React DOM 19.2.8, Three
 - **What if** stores up to 12 independent snapshots. Restore a branch to experiment from that point. Export/import JSON for persistence across sessions; in-memory branches are not an autosave.
 - **Physics** displays live energy history and system diagnostics, physical-model switches and field visualizations.
 - **Story** has eight reproducible scenes, narration, chapter selection, pause, progress seeking and sandbox handoff. Leaving Story normally restores the pre-story universe. The final **Enter sandbox** keeps the story's final universe.
-- Sound is opt-in. Its volume and view/quality settings are available at the top right.
+- Sound is opt-in. View, graphics quality, audio preference and volume persist in localStorage. View settings → Reset saved preferences restores defaults. Storage failures leave the app usable. Simulations and branches are never silently restored or overwritten; use JSON export/import to retain experiments.
 
 ### Reading the scene
 
@@ -67,7 +69,12 @@ src/
   App.jsx                     UI, events, story playback and experiment controls
   App.css                     Responsive HUD and panels
   physics/
-    PhysicsEngine.js          Renderer-independent simulation, bodies and vectors
+    PhysicsEngine.js          Stateful integration, events, capture and history
+    constants.js / Vector3.js / CelestialBody.js  Units, math and entities
+    presets.js / stellar.js   Representative properties and display-color helper
+    collisions.js / tides.js  Impact budgets, physical debris and Roche estimates
+    radiation.js / relativity.js / orbits.js  Pure scientific helpers
+    worker/                   Optional batch worker and request client
     story.js                  Deterministic chapter initial conditions
   scene/
     Universe.jsx              R3F bodies, effects, camera and placement
@@ -92,3 +99,7 @@ At extreme time settings the engine drops excess requested simulated time rather
 Planet/Sun/Moon/Milky Way maps: [Solar System Scope / INOVE](https://www.solarsystemscope.com/textures/), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). See [texture attribution](./public/textures/ATTRIBUTION.md). Saturn rings are procedural geometry. Image loading failures fall back to colored materials.
 
 DM Sans and IBM Plex Mono are distributed under the SIL Open Font License; copies are included in `public/fonts`. No third-party analytics or tracking is included.
+
+## Quality and acceptance
+
+CI uses Node 24 and runs npm ci, tests, production build and ESLint. ESLint 9 is pinned for the React plugin peer range. Generate repeatable local browser fixtures with `node scripts/create-acceptance-fixtures.js`, then import files from the gitignored `artifacts/` directory. Physics stays on the main thread; live worker synchronization is deferred. See VALIDATION.md for measured benchmark scope and browser results.

@@ -13,6 +13,7 @@ import {
   CelestialBody,
   isStar,
   TAU,
+  blackbodyColor,
 } from "../physics/PhysicsEngine.js";
 import {
   mapPosition,
@@ -49,7 +50,10 @@ function useSafeTexture(name) {
               resolve(loaded);
             },
             undefined,
-            () => resolve(null),
+            () => {
+              textureRequests.delete(name);
+              resolve(null);
+            },
           );
         }),
       );
@@ -122,43 +126,6 @@ function SpaceBackground() {
 
 const glowVertex = `varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
 const glowFragment = `varying vec2 vUv; uniform vec3 color; uniform float strength; void main(){float r=length(vUv-.5)*2.;float a=pow(max(0.,1.-r),3.)*strength;gl_FragColor=vec4(color,a);}`;
-
-// Enhanced stellar surface shader with limb darkening and surface detail
-const stellarVertex = `
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  void main(){
-    vUv = uv;
-    vNormal = normalize(normalMatrix * normal);
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-const stellarFragment = `
-  varying vec2 vUv;
-  varying vec3 vNormal;
-  uniform sampler2D map;
-  uniform vec3 color;
-  uniform float time;
-
-  float noise(vec3 p){
-    return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
-  }
-
-  void main(){
-    vec3 base = texture2D(map, vUv).rgb * color;
-
-    // Limb darkening effect
-    float rim = 1.0 - abs(vNormal.z);
-    rim = pow(rim, 2.2);
-    base *= (0.7 + rim * 0.3);
-
-    // Surface granulation (simplified)
-    float gran = noise(vUv * 20.0 + time * 0.1) * 0.15;
-    base += gran * color;
-
-    gl_FragColor = vec4(base, 1.0);
-  }
-`;
 function Glow({ color = "#f3ad65", size = 1, opacity = 0.6 }) {
   const uniforms = useMemo(
     () => ({
@@ -181,46 +148,6 @@ function Glow({ color = "#f3ad65", size = 1, opacity = 0.6 }) {
         />
       </mesh>
     </Billboard>
-  );
-}
-
-function DynamicSolarFlares({ body, radius }) {
-  const ref = useRef();
-  const flareCount = Math.min(8, Math.max(2, Math.floor(Math.log1p(body.radius) * 1.5)));
-
-  useFrame(({ clock }) => {
-    if (ref.current) {
-      ref.current.children.forEach((child, i) => {
-        const time = clock.elapsedTime;
-        const phase = (i / flareCount) * Math.PI * 2;
-        const scale = 0.8 + Math.sin(time * 2 + phase) * 0.4;
-        const yOffset = Math.cos(time * 1.5 + phase) * radius * 1.2;
-        const xOffset = Math.sin(time * 1.2 + phase) * radius * 0.8;
-
-        child.position.set(xOffset, yOffset, 0);
-        child.scale.setScalar(scale);
-        child.material.opacity = 0.6 + Math.sin(time * 3 + phase) * 0.3;
-      });
-    }
-  });
-
-  return (
-    <group ref={ref}>
-      {Array.from({ length: flareCount }).map((_, i) => (
-        <Billboard key={i}>
-          <mesh position={[radius * 0.8, radius * 0.6, 0]}>
-            <planeGeometry args={[radius * 0.4, radius * 0.6]} />
-            <meshBasicMaterial
-              color="#ffcc66"
-              transparent
-              opacity={0.6}
-              blending={THREE.AdditiveBlending}
-              depthWrite={false}
-            />
-          </mesh>
-        </Billboard>
-      ))}
-    </group>
   );
 }
 
@@ -464,11 +391,13 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
     texture = useSafeTexture(body.metadata.texture);
   const radius = visualRadius(body),
     star = isStar(body),
-    color = body.metadata.color || "#8cb8c7";
+    color = star ? new THREE.Color().setRGB(...blackbodyColor(body.temperature), THREE.SRGBColorSpace) : body.metadata.color || "#8cb8c7";
+  const glowStrength = Math.min(1, Math.log1p(body.luminosity) / 8);
   const axis = useMemo(() => new THREE.Vector3(1, 0, 0), []),
     direction = useMemo(() => new THREE.Vector3(), []);
   useFrame((_, dt) => {
     if (!group.current) return;
+    group.current.visible = engine.bodies.includes(body);
     group.current.position.set(
       ...bodyPosition(body, engine, settings.compressed),
     );
@@ -499,10 +428,11 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
       }
     }
     if (light.current)
-      light.current.intensity = 18 + (body.metadata.activeSolarFlare ? 6 : 0);
+      light.current.intensity = Math.min(35, 18 * Math.sqrt(body.luminosity)) + (body.metadata.activeSolarFlare ? 6 : 0);
     if (cometTail.current) {
       const primary = engine.getBody(body.metadata.nearestStarId),
         length = body.metadata.tailLength || 0.05;
+      cometTail.current.visible = !!primary && body.metadata.tailLength > 0;
       if (primary) {
         direction
           .set(...bodyPosition(primary, engine, settings.compressed))
@@ -564,7 +494,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
                 <meshBasicMaterial
                   key={texture?.uuid || "fallback"}
                   map={texture}
-                  color={texture ? "#ffe5bf" : color}
+                  color={color}
                   toneMapped={false}
                 />
               ) : (
@@ -612,7 +542,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
       )}
       {star && (
         <>
-          <Glow color={color} size={radius * 3.8} opacity={0.28} />
+          <Glow color={color} size={radius * (3 + glowStrength * 2)} opacity={0.2 + glowStrength * 0.2} />
           {(body.id === "sun" ||
             engine.bodies.filter(isStar).indexOf(body) < 3) && (
             <pointLight
@@ -649,18 +579,6 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
           </mesh>
         </group>
       )}
-      {body.type === "debris" && (
-        <mesh>
-          <dodecahedronGeometry args={[radius * 0.8, 0]} />
-          <meshStandardMaterial
-            color={body.metadata.color || "#a8a8a8"}
-            roughness={0.95}
-            metalness={0.1}
-            emissive={body.metadata.color || "#333333"}
-            emissiveIntensity={(body.metadata.impactGlowUntil || 0) > engine.time ? 0.6 : 0}
-          />
-        </mesh>
-      )}
       {(selected || hover) && (
         <SelectionRing radius={radius} selected={selected} />
       )}
@@ -688,17 +606,35 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
   );
 }
 
-function OrbitPath({ body, engine, compressed, revision }) {
-  const points = useMemo(() => {
-    const primary = engine.getBody(body.metadata.primaryId || "sun");
-    if (!primary || primary === body || body.type === "moon") return [];
+function findPrimary(body, engine) {
+  if (body.metadata?.primaryId) {
+    const p = engine.getBody(body.metadata.primaryId);
+    if (p && p !== body) return p;
+  }
+  const sun = engine.getBody("sun");
+  if (sun && sun !== body) return sun;
+  let dominant = null,
+    maxMass = 0;
+  for (const b of engine.bodies) {
+    if (b !== body && b.enabled && b.active && b.mass > maxMass) {
+      maxMass = b.mass;
+      dominant = b;
+    }
+  }
+  return dominant;
+}
+
+function OrbitPath({ body, engine, selected, compressed, revision }) {
+  const geometryData = useMemo(() => {
+    const primary = findPrimary(body, engine);
+    if (!primary || primary === body || body.type === "moon") return null;
     const elements = engine.calculateOrbitalElements(body, primary);
     if (
       !elements?.bound ||
-      elements.eccentricity > 0.97 ||
-      elements.semiMajorAxis > 500
+      elements.eccentricity > 0.98 ||
+      elements.semiMajorAxis > 1000
     )
-      return [];
+      return null;
     const r = body.position.clone().sub(primary.position),
       v = body.velocity.clone().sub(primary.velocity),
       normal = r.clone().cross(v).normalize();
@@ -708,33 +644,68 @@ function OrbitPath({ body, engine, compressed, revision }) {
       4 * Math.PI ** 2 * engine.gravityMultiplier * (body.mass + primary.mass);
     const ev = v.clone().cross(r.clone().cross(v)).divideScalar(mu).sub(x),
       omega = Math.atan2(ev.dot(y), ev.dot(x));
-    const result = [];
-    for (let i = 0; i <= 180; i++) {
-      const a = (i / 180) * TAU,
+
+    const segments = 180;
+    const positions = new Float32Array(segments * 3);
+    const isMoon = body.type === "moon";
+    const scaleFactor = isMoon && compressed ? 160 : 1;
+
+    for (let i = 0; i < segments; i++) {
+      const a = (i / segments) * TAU,
         distance =
           (elements.semiMajorAxis * (1 - elements.eccentricity ** 2)) /
           (1 + elements.eccentricity * Math.cos(a - omega));
-      result.push(
-        mapPosition(
+
+      if (isMoon && compressed) {
+        const center = mapPosition(primary.position, compressed);
+        positions[i * 3] =
+          center[0] +
+          (x.x * Math.cos(a) + y.x * Math.sin(a)) * distance * scaleFactor;
+        positions[i * 3 + 1] =
+          center[1] +
+          (x.y * Math.cos(a) + y.y * Math.sin(a)) * distance * scaleFactor;
+        positions[i * 3 + 2] =
+          center[2] +
+          (x.z * Math.cos(a) + y.z * Math.sin(a)) * distance * scaleFactor;
+      } else {
+        const mapped = mapPosition(
           primary.position
             .clone()
             .addScaledVector(x, distance * Math.cos(a))
             .addScaledVector(y, distance * Math.sin(a)),
           compressed,
-        ),
-      );
+        );
+        positions[i * 3] = mapped[0];
+        positions[i * 3 + 1] = mapped[1];
+        positions[i * 3 + 2] = mapped[2];
+      }
     }
-    return result;
-  }, [body, engine, compressed, revision]);
-  return points.length ? (
-    <Line
-      points={points}
-      color={body.metadata.color || "#536472"}
-      lineWidth={0.6}
-      transparent
-      opacity={0.21}
-    />
-  ) : null;
+
+    const color = body.metadata.color || (selected ? "#a8e0e3" : "#7bbad7");
+    return { positions, count: segments, color };
+  }, [body, engine, selected, compressed, revision]);
+
+  if (!geometryData) return null;
+
+  return (
+    <lineLoop>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={geometryData.count}
+          array={geometryData.positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <lineBasicMaterial
+        color={geometryData.color}
+        transparent
+        opacity={selected ? 0.82 : 0.45}
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </lineLoop>
+  );
 }
 
 function HabitableZone({ engine, compressed }) {
@@ -910,26 +881,12 @@ function CameraController({
     offset = useRef(new THREE.Vector3()),
     previous = useRef(new THREE.Vector3()),
     moving = useRef(true),
-    focused = useRef(null),
-    shake = useRef({ intensity: 0, duration: 0, elapsed: 0 });
+    focused = useRef(null);
   const temp = useMemo(() => new THREE.Vector3(), []),
     reduced = useMemo(
       () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       [],
     );
-
-  useEffect(() => {
-    const handleEngulfment = (event) => {
-      shake.current = {
-        intensity: event.intensity || 1,
-        duration: event.duration || 0.6,
-        elapsed: 0,
-      };
-    };
-    engine.on("blackHoleEngulfment", handleEngulfment);
-    return () => engine.off("blackHoleEngulfment", handleEngulfment);
-  }, [engine]);
-
   useEffect(() => {
     moving.current = true;
     focused.current = selectedId;
@@ -957,21 +914,6 @@ function CameraController({
   useFrame((_, dt) => {
     const orbit = controls.current;
     if (!orbit) return;
-
-    // Apply screen shake
-    if (shake.current.elapsed < shake.current.duration) {
-      shake.current.elapsed += dt;
-      const progress = shake.current.elapsed / shake.current.duration;
-      const decay = Math.cos(progress * Math.PI) * 0.5; // Fade out over time
-      const intensity = shake.current.intensity * decay;
-
-      const shakeX = (Math.random() - 0.5) * intensity * 0.02;
-      const shakeY = (Math.random() - 0.5) * intensity * 0.02;
-      const shakeZ = (Math.random() - 0.5) * intensity * 0.01;
-
-      camera.position.add(new THREE.Vector3(shakeX, shakeY, shakeZ));
-    }
-
     const body = engine.getBody(selectedId);
     if (body) {
       target.current.set(...bodyPosition(body, engine, settings.compressed));
@@ -1158,6 +1100,7 @@ function Scene({
   onFrame,
   panelOpen,
   storyMode,
+  onFailure,
 }) {
   const controls = useRef(),
     frameSample = useRef({ frames: 0, elapsed: 0 });
@@ -1167,7 +1110,8 @@ function Scene({
     return () => clearInterval(interval);
   }, []);
   useFrame((_, dt) => {
-    engine.update(dt);
+    try { engine.update(dt); }
+    catch (error) { engine.pause(); onFailure(error.message); return; }
     frameSample.current.frames++;
     frameSample.current.elapsed += dt;
     if (frameSample.current.elapsed > 1) {
@@ -1185,12 +1129,20 @@ function Scene({
       <hemisphereLight args={["#acc3d9", "#1c1713", 0.42]} />
       {settings.orbits &&
         bodies
-          .filter((b) => b.type === "planet")
+          .filter(
+            (b) =>
+              b.type !== "star" &&
+              b.type !== "black hole" &&
+              b.type !== "wormhole" &&
+              b.type !== "moon" &&
+              !b.metadata?.fragment,
+          )
           .map((body) => (
             <OrbitPath
               key={body.id}
               body={body}
               engine={engine}
+              selected={selectedId === body.id}
               compressed={settings.compressed}
               revision={`${orbitRevision}-${sceneRevision}`}
             />
@@ -1276,9 +1228,12 @@ function Scene({
 }
 
 export default function Universe(props) {
+  const [failure, setFailure] = useState(null);
+  if (failure) return <div className="render-error" role="alert"><h2>The observatory paused.</h2><p>{failure}</p><button onClick={() => location.reload()}>Reload observatory</button></div>;
   return (
     <>
       <Canvas
+        fallback={<div className="render-error" role="alert">WebGL 2 is unavailable. Enable browser hardware acceleration and reload.</div>}
         className={props.buildTool ? "universe placing" : "universe"}
         camera={{ position: [13, 17, 21], fov: 43, near: 0.005, far: 1000 }}
         dpr={props.settings.quality === "high" ? [1, 1.75] : [1, 1.25]}
@@ -1288,12 +1243,17 @@ export default function Universe(props) {
           powerPreference: "high-performance",
         }}
         onCreated={({ gl }) => {
+          gl.domElement.addEventListener("webglcontextlost", (event) => {
+            event.preventDefault();
+            props.engine.pause();
+            setFailure("The graphics context was lost. Reload to recover the observatory.");
+          }, { once: true });
           gl.setClearColor("#060a10");
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1;
         }}
       >
-        <Scene {...props} />
+        <Scene {...props} onFailure={setFailure} />
       </Canvas>
       <LoadingStatus />
     </>

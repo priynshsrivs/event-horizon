@@ -1,4 +1,4 @@
-import { Vector3, G, TAU, EARTH_RADIUS_M, AU_M } from "./PhysicsEngine.js";
+import { Vector3, TAU, EARTH_RADIUS_M, AU_M } from "./PhysicsEngine.js";
 
 export const CHAPTERS = [
   {

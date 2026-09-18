@@ -1,108 +1,19 @@
+import { Vector3 } from "./Vector3.js";
 import {
-  AU_M,
-  SOLAR_MASS_KG,
-  EARTH_RADIUS_M,
-  C_M_PER_S,
-  G_SI,
-  G,
-  auToMeters,
-  solarMassesToKg,
   clamp,
+  finite,
+  jsonClone,
+  EARTH_RADIUS_M,
+  AU_M,
+  G_SI,
+  SOLAR_MASS_KG,
+  C_M_PER_S,
+  solarMassesToKg,
+  auToMeters,
+  G,
 } from "./constants.js";
 
-const finite = (x, fallback = 0) =>
-  Number.isFinite(Number(x)) ? Number(x) : fallback;
-const jsonClone = (x) => JSON.parse(JSON.stringify(x));
-
-export class Vector3 {
-  constructor(x = 0, y = 0, z = 0) {
-    this.set(x, y, z);
-  }
-  set(x, y, z) {
-    this.x = finite(x);
-    this.y = finite(y);
-    this.z = finite(z);
-    return this;
-  }
-  copy(v) {
-    return this.set(v.x, v.y, v.z);
-  }
-  clone() {
-    return new Vector3(this.x, this.y, this.z);
-  }
-  add(v) {
-    this.x += finite(v.x);
-    this.y += finite(v.y);
-    this.z += finite(v.z);
-    return this;
-  }
-  addScaledVector(v, s) {
-    this.x += finite(v.x) * s;
-    this.y += finite(v.y) * s;
-    this.z += finite(v.z) * s;
-    return this;
-  }
-  sub(v) {
-    this.x -= finite(v.x);
-    this.y -= finite(v.y);
-    this.z -= finite(v.z);
-    return this;
-  }
-  multiplyScalar(s) {
-    this.x *= s;
-    this.y *= s;
-    this.z *= s;
-    return this;
-  }
-  divideScalar(s) {
-    return s === 0 ? this.set(0, 0, 0) : this.multiplyScalar(1 / s);
-  }
-  lengthSq() {
-    return this.x * this.x + this.y * this.y + this.z * this.z;
-  }
-  length() {
-    return Math.sqrt(this.lengthSq());
-  }
-  distanceTo(v) {
-    return Math.hypot(this.x - v.x, this.y - v.y, this.z - v.z);
-  }
-  dot(v) {
-    return this.x * v.x + this.y * v.y + this.z * v.z;
-  }
-  cross(v) {
-    const x = this.y * v.z - this.z * v.y,
-      y = this.z * v.x - this.x * v.z,
-      z = this.x * v.y - this.y * v.x;
-    return this.set(x, y, z);
-  }
-  normalize() {
-    const l = this.length();
-    return l > 0 ? this.divideScalar(l) : this.set(0, 0, 0);
-  }
-  setLength(n) {
-    return this.normalize().multiplyScalar(n);
-  }
-  negate() {
-    return this.multiplyScalar(-1);
-  }
-  lerp(v, t) {
-    this.x += (v.x - this.x) * t;
-    this.y += (v.y - this.y) * t;
-    this.z += (v.z - this.z) * t;
-    return this;
-  }
-  toArray() {
-    return [this.x, this.y, this.z];
-  }
-  fromArray(a) {
-    return this.set(a[0], a[1], a[2]);
-  }
-  static from(v) {
-    return Array.isArray(v)
-      ? new Vector3().fromArray(v)
-      : new Vector3(v?.x, v?.y, v?.z);
-  }
-}
+export { Vector3 };
 
 export class CelestialBody {
   constructor(data = {}) {
@@ -159,6 +70,7 @@ export class CelestialBody {
     // the values that participate in equations or renderer transforms.
     for (const [key, fallback, min, max] of [
       ["softening", 0, 0, 1e5],
+      ["captureRadiusAU", 0, 0, 1e5],
       ["visualSize", 0.06, 0.001, 5],
       ["displayScale", 1, 0.001, 1e6],
       ["tidalStretch", 1, 0.2, 3],
@@ -216,3 +128,5 @@ export class CelestialBody {
     return new CelestialBody(data);
   }
 }
+
+export default CelestialBody;
