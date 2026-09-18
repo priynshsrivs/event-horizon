@@ -65,12 +65,26 @@ import { Vector3 } from "./Vector3.js";
 export { Vector3 };
 
 import { CelestialBody } from "./CelestialBody.js";
-
 export { CelestialBody };
 
 import { BODY_PRESETS } from "./presets.js";
-
 export { BODY_PRESETS };
+
+import {
+  closestApproach,
+  bounceBodies,
+  calculateAngularMomentumBudget,
+  calculateCollisionOutcome,
+  createDebrisPayloads,
+} from "./collisions.js";
+
+export {
+  closestApproach,
+  bounceBodies,
+  calculateAngularMomentumBudget,
+  calculateCollisionOutcome,
+  createDebrisPayloads,
+};
 
 export class PhysicsEngine {
   constructor(options = {}) {
@@ -312,17 +326,7 @@ export class PhysicsEngine {
   }
   // Swept relative segment prevents small, fast projectiles tunneling between steps.
   closestApproach(a, b) {
-    const ap = a._previous || a.position,
-      bp = b._previous || b.position;
-    const x = bp.x - ap.x,
-      y = bp.y - ap.y,
-      z = bp.z - ap.z;
-    const dx = b.position.x - a.position.x - x,
-      dy = b.position.y - a.position.y - y,
-      dz = b.position.z - a.position.z - z;
-    const length2 = dx * dx + dy * dy + dz * dz;
-    const t = length2 ? clamp(-(x * dx + y * dy + z * dz) / length2, 0, 1) : 1;
-    return Math.hypot(x + dx * t, y + dy * t, z + dz * t);
+    return closestApproach(a, b);
   }
   handlePortalsAndCaptures() {
     for (const source of [...this.bodies]) {
@@ -408,70 +412,17 @@ export class PhysicsEngine {
           this.bounceBodies(a, b);
           continue;
         }
-        const speed = a.velocity.distanceTo(b.velocity);
-        const escape = Math.sqrt(
-          (2 * G * this.gravityMultiplier * (a.mass + b.mass)) /
-            (a.radius + b.radius),
-        );
-        const ratio = speed / Math.max(escape, 1e-10);
-        const fraction =
-          a.collisionMode === "merge" || b.collisionMode === "merge"
-            ? 0
-            : clamp((ratio - 0.9) * 0.15, 0, 0.45);
-        const survivor = a.mass >= b.mass ? a : b,
-          victim = survivor === a ? b : a;
-        this.mergeBodies(survivor, victim, fraction);
-        consumed.add(victim.id);
+        const outcome = calculateCollisionOutcome(a, b, this.gravityMultiplier);
+        this.mergeBodies(outcome.survivor, outcome.victim, outcome.fraction);
+        consumed.add(outcome.victim.id);
         // Each body resolves at most one impact per step to avoid stale-pair cascades.
-        consumed.add(survivor.id);
+        consumed.add(outcome.survivor.id);
         break;
       }
     }
   }
   bounceBodies(a, b, restitution = 0.55, friction = 0.2) {
-    const n = b.position.clone().sub(a.position).normalize();
-    if (!n.lengthSq()) n.set(1, 0, 0);
-    const ra = n.clone().multiplyScalar(a.radius),
-      rb = n.clone().multiplyScalar(-b.radius);
-    const va = a.velocity.clone().add(a.angularVelocity.clone().cross(ra));
-    const vb = b.velocity.clone().add(b.angularVelocity.clone().cross(rb));
-    const relative = vb.sub(va),
-      normalSpeed = relative.dot(n),
-      inverseMass = 1 / a.mass + 1 / b.mass;
-    const inertiaA = 0.4 * a.mass * a.radius ** 2,
-      inertiaB = 0.4 * b.mass * b.radius ** 2;
-    if (normalSpeed < 0) {
-      const j = (-(1 + restitution) * normalSpeed) / inverseMass;
-      const impulse = n.clone().multiplyScalar(j);
-      const tangent = relative.clone().addScaledVector(n, -normalSpeed),
-        tangentSpeed = tangent.length();
-      if (tangentSpeed > 0) {
-        tangent.divideScalar(tangentSpeed);
-        const jt = Math.min(
-          friction * j,
-          tangentSpeed /
-            (inverseMass + a.radius ** 2 / inertiaA + b.radius ** 2 / inertiaB),
-        );
-        impulse.addScaledVector(tangent, -jt);
-      }
-      a.velocity.addScaledVector(impulse, -1 / a.mass);
-      b.velocity.addScaledVector(impulse, 1 / b.mass);
-      a.angularVelocity.addScaledVector(
-        ra.clone().cross(impulse),
-        -1 / inertiaA,
-      );
-      b.angularVelocity.addScaledVector(
-        rb.clone().cross(impulse),
-        1 / inertiaB,
-      );
-    }
-    const overlap =
-      Math.max(0, a.radius + b.radius - a.position.distanceTo(b.position)) +
-      1e-10;
-    a.position.addScaledVector(n, (-overlap * b.mass) / (a.mass + b.mass));
-    b.position.addScaledVector(n, (overlap * a.mass) / (a.mass + b.mass));
-    a.metadata.collisionCooldown = b.metadata.collisionCooldown =
-      this.time + this.fixedDt * 2;
+    bounceBodies(a, b, restitution, friction, this.time, this.fixedDt);
     this.emit("impactWave", { position: a.position.clone(), intensity: 0.5 });
   }
   calculateAngularMomentumBudget(
@@ -479,17 +430,7 @@ export class PhysicsEngine {
     origin = new Vector3(),
     velocity = new Vector3(),
   ) {
-    const L = new Vector3();
-    for (const b of bodies) {
-      L.add(
-        b.position
-          .clone()
-          .sub(origin)
-          .cross(b.velocity.clone().sub(velocity).multiplyScalar(b.mass)),
-      );
-      L.addScaledVector(b.angularVelocity, 0.4 * b.mass * b.radius ** 2);
-    }
-    return L;
+    return calculateAngularMomentumBudget(bodies, origin, velocity);
   }
   mergeBodies(a, b, ejectFraction = 0) {
     if (!this.getBody(a.id) || !this.getBody(b.id) || a === b) return a;
@@ -561,45 +502,19 @@ export class PhysicsEngine {
     return a;
   }
   generateDebris(source, mass, speed, requestedCount = 8, spread = 2.5) {
-    let count = Math.min(requestedCount, this.maxBodies - this.bodies.length);
-    count -= count % 2;
-    if (count < 2) return [];
-    const fragments = [],
-      radius = source.radius * Math.cbrt(mass / source.mass / count) * 0.7;
-    for (let i = 0; i < count / 2; i++) {
-      const angle = (TAU * i) / (count / 2),
-        y = (this.random() - 0.5) * 0.7;
-      const direction = new Vector3(
-        Math.cos(angle),
-        y,
-        Math.sin(angle),
-      ).normalize();
-      for (const sign of [-1, 1])
-        fragments.push(
-          this.addBody({
-            name: `${source.name} ejecta`,
-            type: "debris",
-            mass: mass / count,
-            radius,
-            position: source.position
-              .clone()
-              .addScaledVector(direction, sign * source.radius * spread),
-            velocity: source.velocity
-              .clone()
-              .addScaledVector(direction, sign * speed),
-            temperature: Math.min(source.temperature, 5000),
-            composition: source.composition,
-            metadata: {
-              visualSize: 0.018,
-              color: "#e9aa79",
-              collisionCooldown: this.time + this.fixedDt * 32,
-              fragment: true,
-              displayScale: source.metadata.displayScale || 1,
-            },
-          }),
-        );
-    }
-    this.emit("debrisGenerated", { fragments });
+    const payloads = createDebrisPayloads({
+      source,
+      mass,
+      speed,
+      requestedCount,
+      spread,
+      maxAvailable: this.maxBodies - this.bodies.length,
+      time: this.time,
+      fixedDt: this.fixedDt,
+      random: () => this.random(),
+    });
+    const fragments = payloads.map((p) => this.addBody(p));
+    if (fragments.length) this.emit("debrisGenerated", { fragments });
     return fragments;
   }
   calculateRocheLimit(primary, satellite, fluid = true) {
