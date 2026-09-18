@@ -126,6 +126,7 @@ function SpaceBackground() {
 
 const glowVertex = `varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`;
 const glowFragment = `varying vec2 vUv; uniform vec3 color; uniform float strength; void main(){float r=length(vUv-.5)*2.;float a=pow(max(0.,1.-r),3.)*strength;gl_FragColor=vec4(color,a);}`;
+
 function Glow({ color = "#f3ad65", size = 1, opacity = 0.6 }) {
   const uniforms = useMemo(
     () => ({
@@ -148,6 +149,46 @@ function Glow({ color = "#f3ad65", size = 1, opacity = 0.6 }) {
         />
       </mesh>
     </Billboard>
+  );
+}
+
+function DynamicSolarFlares({ body, radius }) {
+  const ref = useRef();
+  const flareCount = Math.min(8, Math.max(2, Math.floor(Math.log1p(body.radius) * 1.5)));
+
+  useFrame(({ clock }) => {
+    if (ref.current) {
+      ref.current.children.forEach((child, i) => {
+        const time = clock.elapsedTime;
+        const phase = (i / flareCount) * Math.PI * 2;
+        const scale = 0.8 + Math.sin(time * 2 + phase) * 0.4;
+        const yOffset = Math.cos(time * 1.5 + phase) * radius * 1.2;
+        const xOffset = Math.sin(time * 1.2 + phase) * radius * 0.8;
+
+        child.position.set(xOffset, yOffset, 0);
+        child.scale.setScalar(scale);
+        child.material.opacity = 0.6 + Math.sin(time * 3 + phase) * 0.3;
+      });
+    }
+  });
+
+  return (
+    <group ref={ref}>
+      {Array.from({ length: flareCount }).map((_, i) => (
+        <Billboard key={i}>
+          <mesh position={[radius * 0.8, radius * 0.6, 0]}>
+            <planeGeometry args={[radius * 0.4, radius * 0.6]} />
+            <meshBasicMaterial
+              color="#ffcc66"
+              transparent
+              opacity={0.6}
+              blending={THREE.AdditiveBlending}
+              depthWrite={false}
+            />
+          </mesh>
+        </Billboard>
+      ))}
+    </group>
   );
 }
 
@@ -543,6 +584,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
       {star && (
         <>
           <Glow color={color} size={radius * (3 + glowStrength * 2)} opacity={0.2 + glowStrength * 0.2} />
+          <DynamicSolarFlares body={body} radius={radius} />
           {(body.id === "sun" ||
             engine.bodies.filter(isStar).indexOf(body) < 3) && (
             <pointLight
@@ -578,6 +620,18 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
             />
           </mesh>
         </group>
+      )}
+      {body.type === "debris" && (
+        <mesh>
+          <dodecahedronGeometry args={[radius * 0.8, 0]} />
+          <meshStandardMaterial
+            color={body.metadata.color || "#a8a8a8"}
+            roughness={0.95}
+            metalness={0.1}
+            emissive={body.metadata.color || "#333333"}
+            emissiveIntensity={(body.metadata.impactGlowUntil || 0) > engine.time ? 0.6 : 0}
+          />
+        </mesh>
       )}
       {(selected || hover) && (
         <SelectionRing radius={radius} selected={selected} />
@@ -881,12 +935,26 @@ function CameraController({
     offset = useRef(new THREE.Vector3()),
     previous = useRef(new THREE.Vector3()),
     moving = useRef(true),
-    focused = useRef(null);
+    focused = useRef(null),
+    shake = useRef({ intensity: 0, duration: 0, elapsed: 0 });
   const temp = useMemo(() => new THREE.Vector3(), []),
     reduced = useMemo(
       () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       [],
     );
+
+  useEffect(() => {
+    const handleEngulfment = (event) => {
+      shake.current = {
+        intensity: event.intensity || 1,
+        duration: event.duration || 0.6,
+        elapsed: 0,
+      };
+    };
+    engine.on("blackHoleEngulfment", handleEngulfment);
+    return () => engine.off("blackHoleEngulfment", handleEngulfment);
+  }, [engine]);
+
   useEffect(() => {
     moving.current = true;
     focused.current = selectedId;
@@ -914,6 +982,21 @@ function CameraController({
   useFrame((_, dt) => {
     const orbit = controls.current;
     if (!orbit) return;
+
+    // Apply screen shake
+    if (shake.current.elapsed < shake.current.duration) {
+      shake.current.elapsed += dt;
+      const progress = shake.current.elapsed / shake.current.duration;
+      const decay = Math.cos(progress * Math.PI) * 0.5; // Fade out over time
+      const intensity = shake.current.intensity * decay;
+
+      const shakeX = (Math.random() - 0.5) * intensity * 0.02;
+      const shakeY = (Math.random() - 0.5) * intensity * 0.02;
+      const shakeZ = (Math.random() - 0.5) * intensity * 0.01;
+
+      camera.position.add(new THREE.Vector3(shakeX, shakeY, shakeZ));
+    }
+
     const body = engine.getBody(selectedId);
     if (body) {
       target.current.set(...bodyPosition(body, engine, settings.compressed));

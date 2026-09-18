@@ -13,6 +13,8 @@ import {
   G,
 } from "./constants.js";
 
+export { Vector3 };
+
 export class CelestialBody {
   constructor(data = {}) {
     this.id = String(
@@ -102,6 +104,10 @@ export class CelestialBody {
   }
   escapeVelocity() {
     return Math.sqrt((2 * G * this.mass) / this.radius);
+  }
+  bindingEnergy() {
+    // Gravitational binding energy in simulation units: 3 * G * M^2 / (5 * R)
+    return (3 * G * this.mass ** 2) / (5 * Math.max(this.radius, 1e-20));
   }
   serialize() {
     const data = { ...this };

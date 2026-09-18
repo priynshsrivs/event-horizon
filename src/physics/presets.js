@@ -5,8 +5,11 @@ import {
   G_SI,
   SOLAR_MASS_KG,
   C_M_PER_S,
+  kelvinToRGB,
 } from "./constants.js";
 import { stellarLuminosity } from "./stellar.js";
+
+export { kelvinToRGB };
 
 export const BODY_PRESETS = {
   asteroid: {
@@ -41,7 +44,7 @@ export const BODY_PRESETS = {
     luminosity: 1,
     temperature: 5772,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#ffc77a", visualSize: 0.2, solarActivity: 1 },
+    metadata: { color: "#ffc77a", visualSize: 0.2, solarActivity: 1, texture: "sun" },
   },
   "red giant": {
     mass: 2,
@@ -49,7 +52,7 @@ export const BODY_PRESETS = {
     luminosity: 100,
     temperature: 3500,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#ff7754", visualSize: 0.4 },
+    metadata: { color: "#ff6a3d", visualSize: 0.4, texture: "sun" },
   },
   "red supergiant": {
     mass: 15,
@@ -57,7 +60,15 @@ export const BODY_PRESETS = {
     luminosity: 60000,
     temperature: 3600,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#fa583c", visualSize: 3.1 },
+    metadata: { color: "#fa462a", visualSize: 3.1, texture: "sun" },
+  },
+  supergiant: {
+    mass: 15,
+    radius: 3,
+    luminosity: 60000,
+    temperature: 3600,
+    composition: ["Hydrogen", "Helium"],
+    metadata: { color: "#fa462a", visualSize: 3.1, texture: "sun" },
   },
   "white dwarf": {
     mass: 0.6,
@@ -65,7 +76,7 @@ export const BODY_PRESETS = {
     luminosity: 0.01,
     temperature: 17000,
     composition: ["Carbon", "Oxygen"],
-    metadata: { color: "#d9edff", visualSize: 0.07 },
+    metadata: { color: "#d9edff", visualSize: 0.07, texture: "sun" },
   },
   "brown dwarf": {
     mass: 0.04,
@@ -73,7 +84,7 @@ export const BODY_PRESETS = {
     luminosity: 0.0001,
     temperature: 1400,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#a36043", visualSize: 0.12 },
+    metadata: { color: "#a36043", visualSize: 0.12, texture: "sun" },
   },
   "neutron star": {
     mass: 1.4,
@@ -118,15 +129,33 @@ export const BODY_PRESETS = {
   },
 };
 
-export default BODY_PRESETS;
+export const STARS = new Set([
+  "star",
+  "red giant",
+  "red supergiant",
+  "supergiant",
+  "white dwarf",
+  "brown dwarf",
+  "neutron star",
+  "magnetar",
+]);
+
+export const isStar = (body) => (body && body.type ? STARS.has(body.type) : false);
 
 // Representative radii and effective temperatures define bolometric L/L☉.
 for (const [type, classification] of Object.entries({
-  star: "G main sequence", "red giant": "M giant", "red supergiant": "M supergiant",
-  "white dwarf": "Hot carbon–oxygen remnant", "brown dwarf": "L/T substellar object",
-  "neutron star": "Thermal compact remnant", magnetar: "Magnetic neutron star",
+  star: "G main sequence",
+  "red giant": "M giant",
+  "red supergiant": "M supergiant",
+  supergiant: "M supergiant",
+  "white dwarf": "Hot carbon–oxygen remnant",
+  "brown dwarf": "L/T substellar object",
+  "neutron star": "Thermal compact remnant",
+  magnetar: "Magnetic neutron star",
 })) {
   const preset = BODY_PRESETS[type];
   preset.luminosity = stellarLuminosity(preset.radius, preset.temperature);
   preset.metadata.classification = classification;
 }
+
+export default BODY_PRESETS;

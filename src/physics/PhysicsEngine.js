@@ -1,6 +1,6 @@
 /**
  * Event Horizon simulation kernel. No renderer, DOM, React or Three.js dependencies.
- * Positions/radii: AU. Mass: M☉. Time: Julian years. Temperature: kelvin.
+ * Positions/radii: AU. Mass: Mâ˜‰. Time: Julian years. Temperature: kelvin.
  * Velocity: AU/yr, angular velocity: rad/yr. SI is used only at named boundaries.
  * Newtonian point-mass dynamics are integrated with velocity Verlet. Collisions,
  * tides, stellar evolution and magnetic effects are intentionally reduced models.
@@ -171,7 +171,7 @@ export class PhysicsEngine {
     this.bodies = [];
     this.time = 0;
     this.paused = false;
-    // 0.04 yr/s ≈ 14.6 days per real second; UI states this explicitly.
+    // 0.04 yr/s â‰ˆ 14.6 days per real second; UI states this explicitly.
     this.timeScale = 0.04;
     this.gravityMultiplier = 1;
     this.fixedDt = clamp(finite(options.fixedDt, 1 / 32768), 1 / 2097152, 1 / 32768);
@@ -495,8 +495,15 @@ export class PhysicsEngine {
 
           if (isPhysical || isContact || isSandbox) {
             this.emit(isPhysical ? "eventHorizonCrossed" : "captureRegionEntered", { body: b, primary: source });
+            const capturedMass = b.mass;
             this.mergeBodies(source, b, 0);
             this.emit("bodyCaptured", { body: b, primary: source });
+            this.emit("blackHoleEngulfment", {
+              source,
+              mass: capturedMass,
+              intensity: Math.min(3, Math.log1p(capturedMass) * 0.5),
+              duration: 0.6,
+            });
             continue;
           }
 
@@ -1187,7 +1194,7 @@ export class PhysicsEngine {
     const link = `portal-${this.random()}`;
     return [-1, 1].map((side, i) =>
       this.spawnBody("wormhole", {
-        name: `Wormhole ${i ? "β" : "α"}`,
+        name: `Wormhole ${i ? "Î²" : "Î±"}`,
         position: Vector3.from(center).add(new Vector3(side, 0, side)),
         metadata: { wormholeLink: link },
       }),
@@ -1248,3 +1255,4 @@ export function createSunEarthTestSystem() {
   return createSunEarthTestSystemHelper(PhysicsEngine);
 }
 export default PhysicsEngine;
+
