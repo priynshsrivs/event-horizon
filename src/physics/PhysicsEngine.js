@@ -274,6 +274,18 @@ export class PhysicsEngine {
   setGravityMultiplier(value) {
     this.gravityMultiplier = clamp(finite(value, 1), 0, 10);
   }
+  _containNonFinite(b) {
+    b.position.copy(b._previous || new Vector3());
+    b.velocity.set(0, 0, 0);
+    b.acceleration.set(0, 0, 0);
+    b.enabled = false;
+    this.pause();
+    this.emit("numericalWarning", {
+      body: b,
+      message:
+        "Non-finite motion detected. Body disabled and simulation paused.",
+    });
+  }
   calculateAccelerations() {
     const bodies = this.bodies,
       effectiveG = G * this.gravityMultiplier,
@@ -288,8 +300,14 @@ export class PhysicsEngine {
     for (let i = 0; i < len; i++) {
       const a = bodies[i];
       if (!a.active || !a.enabled) continue;
-      const aPos = a.position,
-        aAcc = a.acceleration,
+      const aPos = a.position;
+      if (
+        !Number.isFinite(aPos.x) ||
+        !Number.isFinite(aPos.y) ||
+        !Number.isFinite(aPos.z)
+      )
+        continue;
+      const aAcc = a.acceleration,
         aMass = a.mass,
         aSoft = a.metadata.softening || 0,
         aIsBH = relativity && a.type === "black hole";
@@ -298,6 +316,12 @@ export class PhysicsEngine {
         const b = bodies[j];
         if (!b.active || !b.enabled) continue;
         const bPos = b.position;
+        if (
+          !Number.isFinite(bPos.x) ||
+          !Number.isFinite(bPos.y) ||
+          !Number.isFinite(bPos.z)
+        )
+          continue;
         const x = bPos.x - aPos.x,
           y = bPos.y - aPos.y,
           z = bPos.z - aPos.z;
@@ -327,6 +351,21 @@ export class PhysicsEngine {
   step(dt = this.fixedDt, { record = true, environment = true } = {}) {
     if (!Number.isFinite(dt) || dt <= 0) return;
     dt = Math.min(dt, this.fixedDt);
+
+    for (const b of this.bodies) {
+      if (!b.active || !b.enabled) continue;
+      if (
+        !Number.isFinite(b.position.x) ||
+        !Number.isFinite(b.position.y) ||
+        !Number.isFinite(b.position.z) ||
+        !Number.isFinite(b.velocity.x) ||
+        !Number.isFinite(b.velocity.y) ||
+        !Number.isFinite(b.velocity.z)
+      ) {
+        this._containNonFinite(b);
+      }
+    }
+
     this.calculateAccelerations();
     for (const b of this.bodies) {
       if (!b.active || !b.enabled) continue;
@@ -349,16 +388,7 @@ export class PhysicsEngine {
         !Number.isFinite(vy) ||
         !Number.isFinite(vz)
       ) {
-        b.position.copy(b._previous || new Vector3());
-        b.velocity.set(0, 0, 0);
-        b.acceleration.set(0, 0, 0);
-        b.enabled = false;
-        this.pause();
-        this.emit("numericalWarning", {
-          body: b,
-          message:
-            "Non-finite motion detected. Body disabled and simulation paused.",
-        });
+        this._containNonFinite(b);
         continue;
       }
       b.rotation.addScaledVector(b.angularVelocity, dt);
