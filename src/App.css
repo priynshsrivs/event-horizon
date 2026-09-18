@@ -4828,3 +4828,80 @@ a {
   }
 }
 
+
+
+/* ============================================================
+   EVENT HORIZON — PREMIUM SPLASH TYPOGRAPHY
+   ============================================================ */
+
+.splash-screen .splash-title {
+  position: relative;
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+  padding: 0.06em 0.02em 0.12em;
+  font-family: "Space Grotesk", sans-serif !important;
+  font-size: clamp(52px, 8.4vw, 142px) !important;
+  font-weight: 500 !important;
+  line-height: 0.9 !important;
+  letter-spacing: 0.075em !important;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #f4fbff !important;
+  -webkit-text-stroke: 0 transparent !important;
+  text-shadow:
+    0 1px 0 rgba(255,255,255,.15),
+    0 0 18px rgba(203,245,255,.11),
+    0 0 42px rgba(131,225,243,.08) !important;
+  filter: none !important;
+  transform: translateZ(0);
+  font-kerning: normal;
+  text-rendering: geometricPrecision;
+}
+.splash-screen .splash-title::before {
+  content: "EVENT HORIZON";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  font: inherit;
+  letter-spacing: inherit;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(228,249,255,.14);
+  filter: blur(0.35px);
+  transform: scaleX(1.018);
+  opacity: .7;
+}
+.splash-screen.stage-1 .splash-title,
+.splash-screen.stage-2 .splash-title,
+.splash-screen.stage-3 .splash-title {
+  opacity: 1 !important;
+}
+.splash-screen.stage-1 .splash-title {
+  color: rgba(246,252,255,.96) !important;
+  text-shadow:
+    0 1px 0 rgba(255,255,255,.12),
+    0 0 16px rgba(199,241,255,.11),
+    0 0 38px rgba(123,220,240,.07) !important;
+}
+.splash-screen.stage-2 .splash-title,
+.splash-screen.stage-3 .splash-title {
+  text-shadow:
+    0 1px 0 rgba(255,255,255,.16),
+    0 0 20px rgba(206,245,255,.14),
+    0 0 48px rgba(124,224,244,.09) !important;
+}
+.splash-title-wrap { perspective: 900px; }
+.splash-screen.stage-1 .splash-center { width: min(1220px, 92vw); }
+@media (max-width: 900px) {
+  .splash-screen .splash-title {
+    font-size: clamp(42px, 9.7vw, 94px) !important;
+    letter-spacing: 0.055em !important;
+  }
+}
+@media (max-width: 560px) {
+  .splash-screen .splash-title {
+    font-size: clamp(28px, 10.9vw, 60px) !important;
+    letter-spacing: 0.035em !important;
+  }
+}
