@@ -362,6 +362,7 @@ function BodyEditor({ body, engine, onChange, notify }) {
     setValues({
       mass: String(body.mass),
       radius: String((body.radius * AU_M) / 1000),
+      displayRadius: String(body.metadata?.displayRadius ?? visualRadius(body)),
       density: String(body.density),
       temperature: String(body.temperature),
       luminosity: String(body.luminosity),
@@ -382,6 +383,7 @@ function BodyEditor({ body, engine, onChange, notify }) {
     const keys = [
       "mass",
       "radius",
+      "displayRadius",
       "density",
       "temperature",
       "luminosity",
@@ -398,6 +400,7 @@ function BodyEditor({ body, engine, onChange, notify }) {
       ) ||
       Number(values.mass) <= 0 ||
       Number(values.radius) <= 0 ||
+      Number(values.displayRadius) <= 0 ||
       Number(values.density) <= 0 ||
       Number(values.temperature) < 0 ||
       Number(values.luminosity) < 0
@@ -412,6 +415,10 @@ function BodyEditor({ body, engine, onChange, notify }) {
     engine.updateBody(body.id, {
       mass: +values.mass,
       radius: (+values.radius * 1000) / AU_M,
+      metadata: {
+        ...(body.metadata || {}),
+        displayRadius: +values.displayRadius,
+      },
       temperature: +values.temperature,
       luminosity: +values.luminosity,
       angularVelocity: [
@@ -439,7 +446,8 @@ function BodyEditor({ body, engine, onChange, notify }) {
       <div className="form-grid">
         {[
           ["mass", "Mass · M☉"],
-          ["radius", "Radius · km"],
+          ["radius", "Physics radius · km"],
+          ["displayRadius", "Visual radius"],
           ["temperature", "Temperature · K"],
           ["luminosity", "Luminosity · L☉"],
           ["spin", "Spin · rad/yr"],
