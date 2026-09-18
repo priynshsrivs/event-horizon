@@ -334,7 +334,14 @@ export const BODY_PRESETS = {
     radius: (2 * G_SI * 5 * SOLAR_MASS_KG) / C_M_PER_S ** 2 / AU_M,
     temperature: 0,
     composition: ["Compact gravitational source"],
-    metadata: { color: "#e8a874", visualSize: 0.17, kerrSpin: 0.6 },
+    metadata: {
+      color: "#e8a874",
+      visualSize: 0.17,
+      displayRadius: 0.28,
+      texture: "ton618",
+      kerrSpin: 0.6,
+      description: "Black hole visualization based on NASA's TON 618 supermassive black-hole scale illustration.",
+    },
   },
   wormhole: {
     mass: 1e-15,
@@ -443,12 +450,18 @@ export class PhysicsEngine {
   updateBody(id, changes) {
     const body = this.getBody(id);
     if (!body) return null;
-    const safe = new CelestialBody({
+    const nextData = {
       ...body.serialize(),
       ...changes,
       id: body.id,
       metadata: { ...body.metadata, ...changes.metadata },
-    });
+    };
+
+    // Black-hole radius is a physical quantity fixed by mass (Schwarzschild radius).
+    // All other celestial bodies accept an authored physical radius.
+    if (body.type === "black hole") {
+      nextData.radius = this.schwarzschildRadius(nextData.mass);
+    }
     Object.assign(body, safe);
     this.emit("bodyUpdated", { body });
     return body;
