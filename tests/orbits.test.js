@@ -23,7 +23,7 @@ function findPrimary(body, engine) {
 
 function computeOrbitPoints(body, engine, compressed = true) {
   const primary = findPrimary(body, engine);
-  if (!primary || primary === body) return null;
+  if (!primary || primary === body || body.type === "moon") return null;
   const elements = engine.calculateOrbitalElements(body, primary);
   if (
     !elements?.bound ||
@@ -80,7 +80,7 @@ function computeOrbitPoints(body, engine, compressed = true) {
   return positions;
 }
 
-test("orbit path generation produces valid closed loops for all planets and moon", () => {
+test("orbit path generation produces valid closed loops for all planets", () => {
   const engine = new PhysicsEngine();
   engine.createScenario("solar");
 
@@ -93,7 +93,6 @@ test("orbit path generation produces valid closed loops for all planets and moon
     "saturn",
     "uranus",
     "neptune",
-    "moon",
   ];
 
   for (const id of planets) {
@@ -124,6 +123,13 @@ test("orbit path generation produces valid closed loops for all planets and moon
       `Orbit loop must be continuous and closed for ${id}`
     );
   }
+
+  const moon = engine.getBody("moon");
+  assert.equal(
+    computeOrbitPoints(moon, engine, true),
+    null,
+    "Moons must not render standalone orbits in macro view"
+  );
 });
 
 test("orbit path falls back to dominant primary when primaryId is missing", () => {

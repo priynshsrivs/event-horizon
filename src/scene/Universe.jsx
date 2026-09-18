@@ -627,7 +627,7 @@ function findPrimary(body, engine) {
 function OrbitPath({ body, engine, selected, compressed, revision }) {
   const geometryData = useMemo(() => {
     const primary = findPrimary(body, engine);
-    if (!primary || primary === body) return null;
+    if (!primary || primary === body || body.type === "moon") return null;
     const elements = engine.calculateOrbitalElements(body, primary);
     if (
       !elements?.bound ||
@@ -1134,6 +1134,7 @@ function Scene({
               b.type !== "star" &&
               b.type !== "black hole" &&
               b.type !== "wormhole" &&
+              b.type !== "moon" &&
               !b.metadata?.fragment,
           )
           .map((body) => (
