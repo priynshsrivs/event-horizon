@@ -1,0 +1,164 @@
+let context = null;
+
+const SOUND_DEFINITIONS = Object.freeze({
+  click: {
+    frequency: 620,
+    endMultiplier: 0.5,
+    duration: 0.07,
+    type: "sine",
+    level: 0.1,
+  },
+  selection: {
+    frequency: 440,
+    endMultiplier: 0.72,
+    duration: 0.16,
+    type: "sine",
+    level: 0.08,
+  },
+  collision: {
+    frequency: 90,
+    endMultiplier: 0.5,
+    duration: 0.4,
+    type: "triangle",
+    level: 0.12,
+  },
+  solarFlare: {
+    frequency: 210,
+    endMultiplier: 0.55,
+    duration: 0.4,
+    type: "sine",
+    level: 0.08,
+  },
+  supernova: {
+    frequency: 45,
+    endMultiplier: 0.5,
+    duration: 1.3,
+    type: "triangle",
+    level: 0.14,
+  },
+  panelOpen: {
+    frequency: 360,
+    endMultiplier: 1.35,
+    duration: 0.12,
+    type: "sine",
+    level: 0.055,
+  },
+  panelClose: {
+    frequency: 300,
+    endMultiplier: 0.72,
+    duration: 0.1,
+    type: "sine",
+    level: 0.045,
+  },
+  toast: {
+    frequency: 520,
+    endMultiplier: 1.18,
+    duration: 0.18,
+    type: "sine",
+    level: 0.065,
+  },
+  warp: {
+    frequency: 180,
+    endMultiplier: 2.2,
+    duration: 0.32,
+    type: "sine",
+    level: 0.07,
+  },
+});
+
+function clampVolume(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : 0;
+}
+
+function getAudioContext() {
+  if (typeof window === "undefined") return null;
+  if (!window.AudioContext && !window.webkitAudioContext) return null;
+
+  try {
+    context ||= new (window.AudioContext || window.webkitAudioContext)();
+    return context;
+  } catch {
+    return null;
+  }
+}
+
+export function playTone(kind = "click", volume = 0.25) {
+  const definition = SOUND_DEFINITIONS[kind] || SOUND_DEFINITIONS.click;
+  const safeVolume = clampVolume(volume);
+
+  if (safeVolume <= 0) return false;
+
+  const audio = getAudioContext();
+  if (!audio) return false;
+
+  const now = audio.currentTime;
+  const duration = definition.duration;
+
+  try {
+    if (audio.state === "suspended") {
+      const resumeResult = audio.resume();
+      if (resumeResult && typeof resumeResult.catch === "function") {
+        resumeResult.catch(() => {});
+      }
+    }
+
+    const oscillator = audio.createOscillator();
+    const gain = audio.createGain();
+
+    oscillator.type = definition.type;
+    oscillator.frequency.setValueAtTime(definition.frequency, now);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      Math.max(1, definition.frequency * definition.endMultiplier),
+      now + duration,
+    );
+
+    const peak = Math.max(0.0001, safeVolume * definition.level);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(
+      peak,
+      now + Math.min(0.012, duration * 0.2),
+    );
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    oscillator.connect(gain);
+    gain.connect(audio.destination);
+
+    oscillator.addEventListener(
+      "ended",
+      () => {
+        try {
+          oscillator.disconnect();
+          gain.disconnect();
+        } catch {
+          // Audio cleanup is best-effort.
+        }
+      },
+      { once: true },
+    );
+
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function disposeAudio() {
+  const audio = context;
+  context = null;
+
+  if (!audio) return;
+
+  try {
+    const result = audio.close();
+    if (result && typeof result.catch === "function") {
+      result.catch(() => {});
+    }
+  } catch {
+    // Audio is optional.
+  }
+}

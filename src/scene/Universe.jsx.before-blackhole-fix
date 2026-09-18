@@ -1,0 +1,1942 @@
+import React, { useRef, useState, useEffect, useMemo } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import {
+  OrbitControls,
+  Html,
+  Line,
+  Billboard,
+  useProgress,
+} from "@react-three/drei";
+import * as THREE from "three";
+import CinematicPostFX from "../cinematic/components/CinematicPostFX.jsx";
+import CinematicParticles from "../cinematic/components/CinematicParticles.jsx";
+import CinematicShockwave from "../cinematic/components/CinematicShockwave.jsx";
+import CinematicWormhole from "../cinematic/components/CinematicWormhole.jsx";
+import CinematicAtmosphere from "../cinematic/components/CinematicAtmosphere.jsx";
+import {
+  Vector3,
+  CelestialBody,
+  isStar,
+  TAU,
+} from "../physics/PhysicsEngine.js";
+import {
+  mapPosition,
+  unmapPosition,
+  bodyPosition,
+  visualRadius,
+} from "./coordinates.js";
+
+const textureCache = new Map();
+const textureRequests = new Map();
+const loader = new THREE.TextureLoader();
+
+const TEXTURE_EXTENSIONS = {
+  earth_clouds: ["png", "jpg", "jpeg", "webp"],
+  saturn_ring: ["png", "jpg", "jpeg", "webp"],
+  galaxy: ["jpg", "jpeg", "png", "webp"],
+};
+
+function textureCandidates(name) {
+  const extensions = TEXTURE_EXTENSIONS[name] || ["jpg", "jpeg", "png", "webp"];
+  return extensions.map((ext) => `/textures/${name}.${ext}`);
+}
+
+function registerTextureStatus(name, status, extra = {}) {
+  const registry = (window.__EVENT_HORIZON_TEXTURE_STATUS__ ||= {});
+  registry[name] = { status, ...extra, time: performance.now() };
+}
+
+function loadTexture(name) {
+  if (!textureRequests.has(name)) {
+    registerTextureStatus(name, "loading");
+    textureRequests.set(
+      name,
+      (async () => {
+        for (const url of textureCandidates(name)) {
+          try {
+            const loaded = await new Promise((resolve, reject) => {
+              loader.load(url, resolve, undefined, reject);
+            });
+            loaded.colorSpace = THREE.SRGBColorSpace;
+            loaded.flipY = true;
+            loaded.wrapS = THREE.ClampToEdgeWrapping;
+            loaded.wrapT = THREE.ClampToEdgeWrapping;
+            loaded.anisotropy = 4;
+            loaded.needsUpdate = true;
+            textureCache.set(name, loaded);
+            registerTextureStatus(name, "loaded", { url });
+            return loaded;
+          } catch {
+            // Try the next supported extension without surfacing a browser error.
+          }
+        }
+        registerTextureStatus(name, "missing", { candidates: textureCandidates(name) });
+        return null;
+      })(),
+    );
+  }
+  return textureRequests.get(name);
+}
+
+function useSafeTexture(name) {
+  const [texture, setTexture] = useState(textureCache.get(name) || null);
+  useEffect(() => {
+    let alive = true;
+    if (!name) {
+      setTexture(null);
+      return undefined;
+    }
+    if (textureCache.has(name)) {
+      setTexture(textureCache.get(name));
+      return undefined;
+    }
+    loadTexture(name).then((loaded) => {
+      if (alive) setTexture(loaded);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [name]);
+  return texture;
+}
+
+function usePrefersReducedMotion() {
+  const get = () =>
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const [reduced, setReduced] = useState(get);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => setReduced(media.matches);
+    onChange();
+    media.addEventListener?.("change", onChange);
+    media.addListener?.(onChange);
+    return () => {
+      media.removeEventListener?.("change", onChange);
+      media.removeListener?.(onChange);
+    };
+  }, []);
+  return reduced;
+}
+
+function AnimatedStarLayer({
+  count,
+  radius,
+  size,
+  opacity,
+  speed,
+  seed = 1,
+  color = "#bbced9",
+  reduced = false,
+}) {
+  const group = useRef();
+  const points = useRef();
+  const material = useRef();
+  const geometry = useMemo(() => {
+    const position = new Float32Array(count * 3);
+    let state = seed >>> 0;
+    const random = () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    for (let i = 0; i < count; i++) {
+      const z = random() * 2 - 1;
+      const angle = random() * TAU;
+      const r = radius * (0.78 + random() * 0.22);
+      position.set(
+        [
+          r * Math.sqrt(1 - z * z) * Math.cos(angle),
+          r * z,
+          r * Math.sqrt(1 - z * z) * Math.sin(angle),
+        ],
+        i * 3,
+      );
+    }
+    return position;
+  }, [count, radius, seed]);
+
+  useFrame(({ clock }, dt) => {
+    if (!group.current) return;
+    if (!reduced) {
+      group.current.rotation.y += dt * speed;
+      group.current.rotation.x += dt * speed * 0.11;
+      if (material.current) {
+        material.current.opacity =
+          opacity * (0.86 + Math.sin(clock.elapsedTime * 0.55 + seed) * 0.08);
+      }
+    } else if (material.current) {
+      material.current.opacity = opacity * 0.88;
+    }
+  });
+
+  return (
+    <group ref={group}>
+      <points ref={points}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[geometry, 3]} />
+        </bufferGeometry>
+        <pointsMaterial
+          ref={material}
+          color={color}
+          size={size}
+          transparent
+          opacity={opacity}
+          sizeAttenuation
+          depthWrite={false}
+        />
+      </points>
+    </group>
+  );
+}
+
+function CinematicDust({ settings, reduced }) {
+  const group = useRef();
+  const material = useRef();
+  const count = settings.quality === "low" ? 120 : settings.quality === "medium" ? 260 : 520;
+  const data = useMemo(() => {
+    let state = 9137;
+    const random = () => {
+      state = (state * 1664525 + 1013904223) >>> 0;
+      return state / 4294967296;
+    };
+    const position = new Float32Array(count * 3);
+    const phase = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const angle = random() * TAU;
+      const r = 12 + random() * 85;
+      const y = (random() - 0.5) * 38;
+      position.set([Math.cos(angle) * r, y, Math.sin(angle) * r], i * 3);
+      phase[i] = random() * TAU;
+    }
+    return { position, phase };
+  }, [count]);
+
+  useFrame(({ clock }, dt) => {
+    if (!group.current || reduced) return;
+    group.current.rotation.y += dt * 0.0025;
+    group.current.rotation.z = Math.sin(clock.elapsedTime * 0.035) * 0.015;
+    if (material.current)
+      material.current.opacity = 0.065 + Math.sin(clock.elapsedTime * 0.32) * 0.012;
+  });
+
+  return (
+    <points ref={group}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[data.position, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        ref={material}
+        color="#89a6b4"
+        size={0.022}
+        transparent
+        opacity={0.065}
+        sizeAttenuation
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
+function SpaceBackground({ settings }) {
+  const texture = useSafeTexture("nebula");
+  const { scene } = useThree();
+  const reduced = usePrefersReducedMotion();
+  const backgroundDrift = useRef(0);
+
+  useEffect(() => {
+    if (!texture) return undefined;
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    scene.background = texture;
+    scene.backgroundIntensity = settings.quality === "high" ? 0.78 : 0.7;
+    scene.backgroundRotation.setFromQuaternion(
+      new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(-13, -17, -21).normalize(),
+      ),
+    );
+    return () => {
+      if (scene.background === texture) scene.background = null;
+    };
+  }, [texture, scene, settings.quality]);
+
+  useFrame((_, dt) => {
+    if (reduced) return;
+    backgroundDrift.current += dt * 0.00018;
+    scene.backgroundRotation.z += dt * 0.00018;
+    scene.backgroundIntensity =
+      (settings.quality === "high" ? 0.78 : 0.7) +
+      Math.sin(backgroundDrift.current * 2.5) * 0.01;
+  });
+
+  const density =
+    settings.quality === "low" ? 460 : settings.quality === "medium" ? 920 : 1500;
+
+  return (
+    <group>
+      <AnimatedStarLayer
+        count={Math.floor(density * 0.5)}
+        radius={245}
+        size={0.11}
+        opacity={0.34}
+        speed={0.0015}
+        seed={21}
+        reduced={reduced}
+      />
+      <AnimatedStarLayer
+        count={Math.floor(density * 0.33)}
+        radius={180}
+        size={0.19}
+        opacity={0.26}
+        speed={-0.0022}
+        seed={77}
+        color="#a5c6d4"
+        reduced={reduced}
+      />
+      <AnimatedStarLayer
+        count={Math.floor(density * 0.17)}
+        radius={130}
+        size={0.28}
+        opacity={0.16}
+        speed={0.0035}
+        seed={131}
+        color="#d4b98f"
+        reduced={reduced}
+      />
+      <CinematicDust settings={settings} reduced={reduced} />
+    </group>
+  );
+}
+
+const glowVertex = `
+  varying vec3 vWorldPosition;
+  varying vec3 vWorldNormal;
+  void main() {
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  }
+`;
+
+const glowFragment = `
+  varying vec3 vWorldPosition;
+  varying vec3 vWorldNormal;
+  uniform vec3 color;
+  uniform float strength;
+  void main() {
+    vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+    float rim = 1.0 - abs(dot(normalize(vWorldNormal), viewDir));
+    float alpha = pow(max(0.0, rim), 2.35) * strength;
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+/*
+ * Stable glow implementation.
+ *
+ * The previous glow was a screen-facing transparent plane. At high zoom it
+ * could move between texture/depth samples while Bloom was evaluating the
+ * frame, which produced intermittent shimmer. This version is a real shell
+ * around the body, does not write depth, is never culled, and never animates
+ * unless a caller explicitly opts in with a pulse.
+ */
+function Glow({ color = "#f3ad65", size = 1, opacity = 0.6, pulse = 0 }) {
+  const uniforms = useMemo(
+    () => ({
+      color: { value: new THREE.Color(color) },
+      strength: { value: opacity },
+    }),
+    [color, opacity],
+  );
+
+  const reduced = usePrefersReducedMotion();
+  const phase = useMemo(() => Math.random() * TAU, []);
+
+  useFrame(({ clock }) => {
+    if (!pulse || reduced) {
+      uniforms.strength.value = opacity;
+      return;
+    }
+
+    uniforms.strength.value =
+      opacity * (1 + Math.sin(clock.elapsedTime * 1.35 + phase) * pulse);
+  });
+
+  return (
+    <mesh
+      scale={size}
+      frustumCulled={false}
+      renderOrder={20}
+      raycast={() => null}
+    >
+      <sphereGeometry args={[1, 48, 32]} />
+      <shaderMaterial
+        vertexShader={glowVertex}
+        fragmentShader={glowFragment}
+        uniforms={uniforms}
+        transparent
+        side={THREE.FrontSide}
+        blending={THREE.AdditiveBlending}
+        depthTest={false}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
+function SelectionRing({ radius, selected }) {
+  const ref = useRef();
+  const reduced = usePrefersReducedMotion();
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    if (reduced) {
+      ref.current.rotation.z = 0;
+      ref.current.scale.setScalar(1);
+      return;
+    }
+    const pulse = selected ? 1 + Math.sin(clock.elapsedTime * 1.9) * 0.035 : 1;
+    ref.current.rotation.z = clock.elapsedTime * (selected ? 0.17 : 0.08);
+    ref.current.scale.setScalar(pulse);
+  });
+  return (
+    <Billboard>
+      <group ref={ref}>
+        {[0, Math.PI].map((start) => (
+          <mesh key={start}>
+            <ringGeometry
+              args={[radius * 1.38, radius * 1.39, 64, 1, start, 2.3]}
+            />
+            <meshBasicMaterial
+              color={selected ? "#a8e0e3" : "#ffffff"}
+              transparent
+              opacity={selected ? 0.82 : 0.5}
+              side={THREE.DoubleSide}
+              depthTest={false}
+              blending={selected ? THREE.AdditiveBlending : THREE.NormalBlending}
+            />
+          </mesh>
+        ))}
+      </group>
+    </Billboard>
+  );
+}
+
+function SaturnRings({ radius }) {
+  const group = useRef();
+  const reduced = usePrefersReducedMotion();
+  useFrame((_, dt) => {
+    if (group.current && !reduced) {
+      group.current.rotation.z += dt * 0.012;
+      group.current.scale.setScalar(1 + Math.sin(performance.now() * 0.00035) * 0.002);
+    }
+  });
+  const bands = [
+    [1.35, 1.47, "#b6a887", 0.58],
+    [1.49, 1.56, "#857963", 0.5],
+    [1.59, 1.7, "#ddcba0", 0.64],
+    [1.72, 1.79, "#a79a7d", 0.34],
+    [1.82, 1.98, "#cdbb91", 0.52],
+  ];
+  return (
+    <group
+      ref={group}
+      rotation={[-Math.PI / 2, 0, 0]}
+      renderOrder={3}
+    >
+      {bands.map(([inner, outer, color, opacity], i) => (
+        <mesh key={i} renderOrder={3 + i}>
+          <ringGeometry args={[radius * inner, radius * outer, 128]} />
+          <meshStandardMaterial
+            color={color}
+            transparent
+            opacity={opacity}
+            roughness={1}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+            polygonOffsetUnits={-1}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+const earthNightVertex = `
+  varying vec2 vUv;
+  varying vec3 vWorldNormal;
+  void main() {
+    vUv = uv;
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const earthNightFragment = `
+  varying vec2 vUv;
+  varying vec3 vWorldNormal;
+  uniform sampler2D nightMap;
+  uniform vec3 sunDirection;
+  uniform float opacity;
+  void main() {
+    float light = dot(normalize(vWorldNormal), normalize(sunDirection));
+    float nightMask = 1.0 - smoothstep(-0.10, 0.16, light);
+    vec4 sampled = texture2D(nightMap, vUv);
+    float alpha = sampled.a * nightMask * opacity;
+    if (alpha < 0.002) discard;
+    gl_FragColor = vec4(sampled.rgb * 1.55, alpha);
+  }
+`;
+
+function EarthLayers({ radius, body, engine, settings }) {
+  const clouds = useSafeTexture("earth_clouds");
+  const night = useSafeTexture("earth_night");
+  const nightRef = useRef();
+  const cloudRef = useRef();
+  const sunDirection = useMemo(() => new THREE.Vector3(1, 0, 0), []);
+  const sunWorld = useMemo(() => new THREE.Vector3(), []);
+  const earthWorld = useMemo(() => new THREE.Vector3(), []);
+
+  const reduced = usePrefersReducedMotion();
+  useFrame((_, dt) => {
+    if (settings.quality === "low") return;
+    const sun = engine.bodies.find(
+      (candidate) => candidate !== body && isStar(candidate) && candidate.luminosity > 0,
+    );
+    if (!sun) return;
+    sunWorld.set(...bodyPosition(sun, engine, settings.compressed));
+    earthWorld.set(...bodyPosition(body, engine, settings.compressed));
+    sunDirection.copy(sunWorld).sub(earthWorld).normalize();
+    if (nightRef.current?.material?.uniforms?.sunDirection)
+      nightRef.current.material.uniforms.sunDirection.value.copy(sunDirection);
+    if (!reduced && cloudRef.current) cloudRef.current.rotation.y += dt * 0.008;
+    if (!reduced && nightRef.current?.material?.uniforms?.opacity)
+      nightRef.current.material.uniforms.opacity.value =
+        0.47 + Math.sin(performance.now() * 0.00022) * 0.025;
+  });
+
+  if (settings.quality === "low") return null;
+
+  return (
+    <>
+      {night && (
+        <mesh ref={nightRef} renderOrder={2}>
+          <sphereGeometry args={[radius * 1.002, settings.quality === "medium" ? 40 : 56, settings.quality === "medium" ? 28 : 40]} />
+          <shaderMaterial
+            uniforms={{
+              nightMap: { value: night },
+              sunDirection: { value: sunDirection.clone() },
+              opacity: { value: 0.48 },
+            }}
+            vertexShader={earthNightVertex}
+            fragmentShader={earthNightFragment}
+            transparent
+            depthTest={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+            side={THREE.FrontSide}
+          />
+        </mesh>
+      )}
+      {clouds && (
+        <mesh
+          ref={cloudRef}
+          renderOrder={3}
+          rotation={[0, 0.02, 0]}
+        >
+          <sphereGeometry args={[radius * 1.012, settings.quality === "medium" ? 40 : 56, settings.quality === "medium" ? 28 : 40]} />
+          <meshStandardMaterial
+            map={clouds}
+            alphaMap={clouds}
+            transparent
+            opacity={0.34}
+            alphaTest={0.01}
+            depthTest={false}
+            depthWrite={false}
+            roughness={1}
+            side={THREE.FrontSide}
+          />
+        </mesh>
+      )}
+      {settings.quality !== "low" && (
+        <CinematicAtmosphere
+          radius={radius}
+          color="#79cfff"
+          intensity={settings.quality === "high" ? 0.32 : 0.24}
+          quality={settings.quality}
+          reducedMotion={reduced}
+        />
+      )}
+    </>
+  );
+}
+
+function BlackHoleVisual({ body, radius, settings, engine }) {
+  const ref = useRef(),
+    reduced = usePrefersReducedMotion(),
+    galaxy = useSafeTexture("galaxy");
+  const uniforms = useMemo(
+    () => ({
+      sky: { value: galaxy },
+      strength: {
+        value:
+          engine.calculateGravitationalLensing(
+            body,
+            engine.schwarzschildRadius(body.mass) * 6,
+          ) * 0.16,
+      },
+      tick: { value: 0 },
+    }),
+    [galaxy, body, engine],
+  );
+  const dragRate = Math.min(
+    0.6,
+    Math.log1p(
+      Math.abs(
+        engine.calculateFrameDragging(
+          body,
+          engine.schwarzschildRadius(body.mass) * 5,
+        ),
+      ),
+    ) * 0.015,
+  );
+  useFrame((_, dt) => {
+    if (ref.current && !reduced)
+      ref.current.rotation.z +=
+        dt * (settings.frameDragging ? 0.04 + dragRate : 0.04);
+    if (!reduced) uniforms.tick.value += dt;
+  });
+  // Background-only lensing impostor: sample the actual Milky Way map with a
+  // radial deflection. This is an artistic screen-aligned approximation, not GR.
+  return (
+    <>
+      <mesh>
+        <sphereGeometry args={[radius, 48, 32]} />
+        <meshBasicMaterial color="#000003" />
+      </mesh>
+      {settings.lensing && settings.quality !== "low" && galaxy && (
+        <Billboard>
+          <mesh scale={radius * 3.5}>
+            <planeGeometry args={[2, 2]} />
+            <shaderMaterial
+              transparent
+              depthWrite={false}
+              uniforms={uniforms}
+              vertexShader={glowVertex}
+              fragmentShader={`varying vec2 vUv;uniform sampler2D sky;uniform float strength;uniform float tick;void main(){vec2 p=vUv-.5;float r=length(p);vec2 warp=p*(1.+strength/max(.015,r*r));vec3 c=texture2D(sky,vec2(atan(warp.y,warp.x)/6.283+.5+tick*.002,length(warp)*.5)).rgb;float a=smoothstep(.14,.19,r)*(1.-smoothstep(.3,.49,r));gl_FragColor=vec4(c*1.5,a*.75);}`}
+            />
+          </mesh>
+        </Billboard>
+      )}
+      <group rotation={[0.2, 0, 0.24]}>
+        <group ref={ref} rotation={[-Math.PI / 2, 0, 0]}>
+          {Array.from({ length: 9 }, (_, i) => (
+            <mesh key={i}>
+              <ringGeometry
+                args={[
+                  radius * (1.55 + i * 0.17),
+                  radius * (1.64 + i * 0.17),
+                  96,
+                  1,
+                  i * 0.4,
+                  TAU - 0.2,
+                ]}
+              />
+              <meshBasicMaterial
+                color={i < 3 ? "#ffe5b7" : "#d98652"}
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.8 - i * 0.065}
+                blending={THREE.AdditiveBlending}
+                depthWrite={false}
+              />
+            </mesh>
+          ))}
+        </group>
+      </group>
+      <Billboard>
+        <mesh>
+          <torusGeometry args={[radius * 1.12, radius * 0.025, 8, 96]} />
+          <meshBasicMaterial color="#fff0d3" />
+        </mesh>
+      </Billboard>
+      {settings.quality !== "low" && (
+        <Glow size={radius * 3.5} color="#ac6131" opacity={0.24} />
+      )}
+    </>
+  );
+}
+
+function ExoticVisual({ body, radius }) {
+  const ref = useRef();
+  const reduced = usePrefersReducedMotion();
+  useFrame(({ clock }, dt) => {
+    if (!ref.current || reduced) return;
+    ref.current.rotation.y += dt * (body.type === "wormhole" ? 0.6 : 1.2);
+    const pulse = 1 + Math.sin(clock.elapsedTime * 1.8) * 0.035;
+    ref.current.scale.setScalar(pulse);
+  });
+  if (body.type === "wormhole")
+    return (
+      <group ref={ref} rotation={[0.6, 0, 0.2]}>
+        {[1, 1.18, 1.4].map((scale, i) => (
+          <mesh key={scale} rotation={[i * 0.7, i * 0.3, 0]}>
+            <torusGeometry args={[radius * scale, radius * 0.035, 8, 72]} />
+            <meshBasicMaterial
+              color={i % 2 ? "#7ce7f4" : "#ad94ff"}
+              transparent
+              opacity={0.8}
+            />
+          </mesh>
+        ))}
+        <Glow color="#8b7bdd" size={radius * 2} opacity={0.8} />
+      </group>
+    );
+  if (body.type === "neutron star" || body.type === "magnetar")
+    return (
+      <group ref={ref} rotation={[0, 0, 0.45]}>
+        {[-1, 1].map((sign) => (
+          <mesh
+            key={sign}
+            position={[0, sign * radius * 3.5, 0]}
+            rotation={[sign < 0 ? Math.PI : 0, 0, 0]}
+          >
+            <coneGeometry args={[radius * 1.6, radius * 7, 24, 1, true]} />
+            <meshBasicMaterial
+              color={body.type === "magnetar" ? "#c6a2ff" : "#8cd5fa"}
+              transparent
+              opacity={0.13}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        ))}
+      </group>
+    );
+  return null;
+}
+
+function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
+  const group = useRef(),
+    surface = useRef(),
+    deformed = useRef(),
+    cometTail = useRef(),
+    light = useRef();
+  const [hover, setHover] = useState(false),
+    texture = useSafeTexture(body.metadata.texture);
+  const radius = visualRadius(body),
+    star = isStar(body),
+    color = body.metadata.color || "#8cb8c7";
+  const axis = useMemo(() => new THREE.Vector3(1, 0, 0), []),
+    direction = useMemo(() => new THREE.Vector3(), []);
+  const reduced = usePrefersReducedMotion();
+
+  // Selective cinematic atmospheric rims.
+  // Earth keeps its dedicated EarthLayers system.
+  const cinematicAtmosphere =
+    body.metadata.texture === "mars"
+      ? { color: "#e58a6b", intensity: 0.18 }
+      : body.metadata.texture === "neptune"
+        ? { color: "#69c9ff", intensity: 0.34 }
+        : body.metadata.texture === "uranus"
+          ? { color: "#9be8e8", intensity: 0.27 }
+          : null;
+
+  const baseGlow = useRef(0.025);
+  useFrame(({ clock }, dt) => {
+    if (!group.current) return;
+    group.current.position.set(
+      ...bodyPosition(body, engine, settings.compressed),
+    );
+    if (surface.current && !engine.paused) {
+      const spin =
+        Math.sign(body.angularVelocity.y || 1) *
+        Math.min(
+          0.45,
+          0.08 + Math.log1p(Math.abs(body.angularVelocity.y)) * 0.022,
+        );
+      surface.current.rotation.y +=
+        dt * spin * (body.metadata.localTimeFactor ?? 1);
+    }
+    if (deformed.current) {
+      const stretch = body.metadata.tidalStretch || 1,
+        primary = engine.getBody(body.metadata.tidalPrimaryId);
+      deformed.current.scale.set(
+        stretch,
+        1 / Math.sqrt(stretch),
+        1 / Math.sqrt(stretch),
+      );
+      if (primary) {
+        direction
+          .set(...bodyPosition(primary, engine, settings.compressed))
+          .sub(group.current.position)
+          .normalize();
+        deformed.current.quaternion.setFromUnitVectors(axis, direction);
+      }
+    }
+    if (light.current) {
+      const flareBoost = body.metadata.activeSolarFlare ? 6 : 0;
+
+      // Keep stellar illumination stable. Large per-frame intensity changes
+      // can cross the cinematic bloom threshold and look like a broken light.
+      // The subtle stellar motion is handled by the visual glow instead.
+      const targetIntensity = 18 + flareBoost;
+      light.current.intensity +=
+        (targetIntensity - light.current.intensity) *
+        Math.min(1, dt * 8);
+    }
+    if (cometTail.current) {
+      const primary = engine.getBody(body.metadata.nearestStarId),
+        length = body.metadata.tailLength || 0.05;
+      if (primary) {
+        direction
+          .set(...bodyPosition(primary, engine, settings.compressed))
+          .sub(group.current.position)
+          .normalize()
+          .negate();
+        cometTail.current.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0),
+          direction,
+        );
+        cometTail.current.scale.y = length;
+      }
+    }
+    if (surface.current?.material && !star && body.type !== "black hole")
+      surface.current.material.emissiveIntensity =
+        (body.metadata.impactGlowUntil || 0) > engine.time ? 0.9 : 0.025;
+  });
+  if (body.type === "dark matter halo" && !settings.darkMatter) return null;
+  return (
+    <group ref={group}>
+      {body.type === "black hole" ? (
+        <BlackHoleVisual
+          body={body}
+          radius={radius}
+          settings={settings}
+          engine={engine}
+        />
+      ) : (
+        <group ref={deformed}>
+          <group rotation={[0, 0, (body.axialTilt * Math.PI) / 180]}>
+            <mesh
+              ref={surface}
+              onClick={(e) => {
+                if (!building) {
+                  e.stopPropagation();
+                  onSelect(body.id);
+                }
+              }}
+              onPointerOver={(e) => {
+                if (!building) {
+                  e.stopPropagation();
+                  setHover(true);
+                }
+              }}
+              onPointerOut={() => {
+                setHover(false);
+              }}
+            >
+              <sphereGeometry
+                args={[
+                  radius,
+                  settings.quality === "low" ? 24 : 48,
+                  settings.quality === "low" ? 16 : 32,
+                ]}
+              />
+              {star ? (
+                <meshBasicMaterial
+                  key={texture?.uuid || "fallback"}
+                  map={texture}
+                  color={texture ? "#ffe5bf" : color}
+                  toneMapped
+                />
+              ) : (
+                <meshStandardMaterial
+                  key={texture?.uuid || "fallback"}
+                  map={texture}
+                  color={texture ? "#ffffff" : color}
+                  roughness={0.92}
+                  metalness={0.03}
+                  emissive={color}
+                  emissiveIntensity={0.025}
+                  transparent={
+                    body.type === "dark matter halo" || body.type === "wormhole"
+                  }
+                  opacity={
+                    body.type === "dark matter halo"
+                      ? 0.055
+                      : body.type === "wormhole"
+                        ? 0.12
+                        : 1
+                  }
+                  depthWrite={body.type !== "dark matter halo"}
+                />
+              )}
+              {body.id === "earth" && (
+                <EarthLayers
+                  radius={radius}
+                  body={body}
+                  engine={engine}
+                  settings={settings}
+                />
+              )}
+            </mesh>
+            {body.metadata.texture === "saturn" && (
+              <SaturnRings radius={radius} />
+            )}
+          </group>
+        </group>
+      )}
+
+      {cinematicAtmosphere && settings.quality !== "low" && (
+        <CinematicAtmosphere
+          radius={radius}
+          color={cinematicAtmosphere.color}
+          intensity={
+            settings.quality === "high"
+              ? cinematicAtmosphere.intensity
+              : cinematicAtmosphere.intensity * 0.78
+          }
+          quality={settings.quality}
+          reducedMotion={reduced}
+        />
+      )}
+
+      {body.type === "black hole" && (
+        <mesh
+          onClick={(e) => {
+            if (!building) {
+              e.stopPropagation();
+              onSelect(body.id);
+            }
+          }}
+        >
+          <sphereGeometry args={[radius * 1.5, 16, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      )}
+      {star && (
+        <>
+          {settings.quality !== "low" && (
+            <Glow color={color} size={radius * 3.8} opacity={0.28} />
+          )}
+          {(body.id === "sun" ||
+            engine.bodies.filter(isStar).indexOf(body) < 3) && (
+            <pointLight
+              ref={light}
+              color={color}
+              intensity={18}
+              decay={0.3}
+              distance={100}
+            />
+          )}
+        </>
+      )}
+      <ExoticVisual body={body} radius={radius} />
+      {body.type === "comet" && (
+        <group ref={cometTail}>
+          <mesh position={[0, 0.5, 0]} rotation={[Math.PI, 0, 0]}>
+            <coneGeometry args={[0.12, 1, 16]} />
+            <meshBasicMaterial
+              color="#b8e4e7"
+              transparent
+              opacity={0.2}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+          <mesh position={[0, 0.7, 0]} rotation={[Math.PI, 0, 0]}>
+            <coneGeometry args={[0.035, 1.4, 12]} />
+            <meshBasicMaterial
+              color="#72bcea"
+              transparent
+              opacity={0.25}
+              depthWrite={false}
+            />
+          </mesh>
+        </group>
+      )}
+      {(selected || hover) && (
+        <SelectionRing radius={radius} selected={selected} />
+      )}
+      {settings.labels &&
+        body.type !== "debris" &&
+        (engine.bodies.length < 30 || body.metadata.texture || selected) && (
+          <Html
+            center
+            position={[radius * 1.5, radius * 1.7, 0]}
+            distanceFactor={undefined}
+            zIndexRange={[2, 0]}
+            style={{ pointerEvents: building ? "none" : "auto" }}
+          >
+            <button
+              className={`planet-label ${selected ? "selected" : ""}`}
+              onClick={() => onSelect(body.id)}
+            >
+              <i style={{ background: color }} />
+              {body.name}
+              {selected && <span>TRACKING</span>}
+            </button>
+          </Html>
+        )}
+    </group>
+  );
+}
+
+function OrbitPath({ body, engine, compressed, revision }) {
+  const points = useMemo(() => {
+    const primary = engine.getBody(body.metadata.primaryId || "sun");
+    if (!primary || primary === body || body.type === "moon") return [];
+    const elements = engine.calculateOrbitalElements(body, primary);
+    if (
+      !elements?.bound ||
+      elements.eccentricity > 0.97 ||
+      elements.semiMajorAxis > 500
+    )
+      return [];
+    const r = body.position.clone().sub(primary.position),
+      v = body.velocity.clone().sub(primary.velocity),
+      normal = r.clone().cross(v).normalize();
+    const x = r.clone().normalize(),
+      y = normal.clone().cross(x).normalize();
+    const mu =
+      4 * Math.PI ** 2 * engine.gravityMultiplier * (body.mass + primary.mass);
+    const ev = v.clone().cross(r.clone().cross(v)).divideScalar(mu).sub(x),
+      omega = Math.atan2(ev.dot(y), ev.dot(x));
+    const result = [];
+    for (let i = 0; i <= 180; i++) {
+      const a = (i / 180) * TAU,
+        distance =
+          (elements.semiMajorAxis * (1 - elements.eccentricity ** 2)) /
+          (1 + elements.eccentricity * Math.cos(a - omega));
+      result.push(
+        mapPosition(
+          primary.position
+            .clone()
+            .addScaledVector(x, distance * Math.cos(a))
+            .addScaledVector(y, distance * Math.sin(a)),
+          compressed,
+        ),
+      );
+    }
+    return result;
+  }, [body, engine, compressed, revision]);
+  return points.length ? (
+    <Line
+      points={points}
+      color={body.metadata.color || "#536472"}
+      lineWidth={0.6}
+      transparent
+      opacity={0.21}
+    />
+  ) : null;
+}
+
+function HabitableZone({ engine, compressed }) {
+  const stars = engine.bodies.filter((b) => b.luminosity > 0.01);
+  return (
+    <>
+      {stars.slice(0, 5).map((star) => {
+        const zone = engine.calculateHabitableZone(star),
+          factor = (r) => (compressed ? 4 * Math.log1p(r) : r);
+        return (
+          <group
+            key={star.id}
+            position={mapPosition(star.position, compressed)}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <mesh>
+              <ringGeometry
+                args={[factor(zone.inner), factor(zone.outer), 128]}
+              />
+              <meshBasicMaterial
+                color="#60b799"
+                side={THREE.DoubleSide}
+                transparent
+                opacity={0.075}
+                depthWrite={false}
+              />
+            </mesh>
+          </group>
+        );
+      })}
+    </>
+  );
+}
+
+function Effect({ effect, engine, compressed, settings }) {
+  const ref = useRef(),
+    light = useRef(),
+    particles = useRef(),
+    materials = useRef([]),
+    started = useRef(performance.now());
+  const reduced = usePrefersReducedMotion();
+  const flare = effect.type === "solarFlare",
+    nova = effect.type === "supernova",
+    impactWave = effect.type === "impactWave",
+    collision = effect.type === "collision",
+    tidal = effect.type === "tidalDisruption",
+    radius = effect.radius || 0.25;
+
+  const cinematicShockwave = (() => {
+    if (nova) {
+      return {
+        color: "#fff1cf",
+        durationMs: 1500,
+        intensity: 1.35,
+        scale: 2.4,
+      };
+    }
+
+    if (tidal) {
+      return {
+        color: "#a88cff",
+        durationMs: 1100,
+        intensity: 0.9,
+        scale: 1.55,
+      };
+    }
+
+    if (flare) {
+      return {
+        color: "#ffd18a",
+        durationMs: 900,
+        intensity: 0.65,
+        scale: 0.95,
+      };
+    }
+
+    if (impactWave) {
+      return {
+        color: "#a9e7ef",
+        durationMs: 1000,
+        intensity: 0.85,
+        scale: 1.35,
+      };
+    }
+
+    if (collision) {
+      return {
+        color: "#d9f7ff",
+        durationMs: 800,
+        intensity: 0.55,
+        scale: 0.9,
+      };
+    }
+
+    return null;
+  })();
+  const particlePositions = useMemo(() => new Float32Array(64 * 3), []);
+  const strands = useMemo(
+    () =>
+      Array.from({ length: 4 }, (_, i) => {
+        const points = [];
+        for (let j = 0; j <= 40; j++) {
+          const t = j / 40;
+          points.push([
+            radius * (0.5 + Math.sin(t * Math.PI) * (2 + i * 0.24)),
+            radius * (-0.7 + 1.4 * t),
+            Math.sin(t * Math.PI) * radius * i * 0.3,
+          ]);
+        }
+        return points;
+      }),
+    [radius],
+  );
+  useFrame(() => {
+    if (!ref.current) return;
+    const age = (performance.now() - started.current) / 1000,
+      duration = flare ? 5 : nova ? 7 : 3,
+      t = reduced ? 1 : age / duration;
+    const star = engine.getBody(effect.bodyId),
+      position = star
+        ? mapPosition(star.position, compressed)
+        : mapPosition(effect.position, compressed);
+    ref.current.position.set(...position);
+    ref.current.visible = t <= 1;
+    ref.current.scale.setScalar(
+      flare
+        ? 1 + Math.sin(Math.min(t, 1) * Math.PI) * 0.4
+        : 0.1 + t * (nova ? 12 : 3),
+    );
+    materials.current.forEach((m, i) => {
+      if (m) m.opacity = Math.max(0, 1 - t) * (i === 1 ? 0.12 : 0.8);
+    });
+    if (particles.current && settings.quality !== "low") {
+      const positions = particles.current.geometry.attributes.position;
+      for (let i = 0; i < 64; i++) {
+        const z = 1 - (2 * (i + 0.5)) / 64,
+          angle = i * 2.399963,
+          r = radius * (1.1 + t * (flare ? 3 : 2)) * (0.7 + (i % 7) / 10);
+        positions.setXYZ(
+          i,
+          Math.sqrt(1 - z * z) * Math.cos(angle) * r,
+          z * r,
+          Math.sqrt(1 - z * z) * Math.sin(angle) * r,
+        );
+      }
+      positions.needsUpdate = true;
+    }
+    if (light.current)
+      light.current.intensity = Math.max(0, (1 - t) * (nova ? 30 : 7));
+  });
+  return (
+    <group ref={ref}>
+      {cinematicShockwave && !reduced && (
+        <CinematicShockwave
+          key={`shockwave-${effect.id}`}
+          position={[0, 0, 0]}
+          color={cinematicShockwave.color}
+          durationMs={cinematicShockwave.durationMs}
+          intensity={cinematicShockwave.intensity}
+        />
+      )}
+
+      {flare ? (
+        <group rotation={effect.rotation || [0, 0, 0]}>
+          {strands.map((points, i) => (
+            <Line
+              ref={(line) => (materials.current[i + 2] = line?.material)}
+              key={i}
+              points={points}
+              color={i < 2 ? "#ffe4aa" : "#f18b47"}
+              lineWidth={i === 0 ? 3 : 1.4}
+              transparent
+              opacity={0.8}
+            />
+          ))}
+          <Glow size={radius * 3} color="#ffb666" />
+        </group>
+      ) : (
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[radius * 2, radius * 0.035, 8, 96]} />
+          <meshBasicMaterial
+            ref={(m) => (materials.current[0] = m)}
+            color={nova ? "#ffd3ad" : "#ed9862"}
+            transparent
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+      <mesh>
+        <sphereGeometry args={[radius * (flare ? 1.5 : 2), 24, 16]} />
+        <meshBasicMaterial
+          ref={(m) => (materials.current[1] = m)}
+          color="#ffd9a3"
+          transparent
+          opacity={0.08}
+          depthWrite={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      {settings.quality !== "low" && (
+        <points ref={particles}>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              args={[particlePositions, 3]}
+            />
+          </bufferGeometry>
+          <pointsMaterial
+            ref={(m) => (materials.current[6] = m)}
+            color="#ffcc8b"
+            size={radius * 0.05}
+            sizeAttenuation
+            transparent
+            opacity={0.8}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </points>
+      )}
+      <pointLight ref={light} color="#ffc59a" distance={nova ? 30 : 5} />
+    </group>
+  );
+}
+
+function CameraController({
+  engine,
+  selectedId,
+  homeToken,
+  settings,
+  controls,
+  building,
+  panelOpen,
+  storyMode,
+  effects = [],
+}) {
+  const { camera, size } = useThree();
+  const target = useRef(new THREE.Vector3()),
+    desired = useRef(new THREE.Vector3()),
+    offset = useRef(new THREE.Vector3()),
+    previous = useRef(new THREE.Vector3()),
+    moving = useRef(true),
+    focused = useRef(null),
+    focusPulse = useRef(1),
+    positionVelocity = useRef(new THREE.Vector3()),
+    targetVelocity = useRef(new THREE.Vector3()),
+    temp = useMemo(() => new THREE.Vector3(), []),
+    right = useMemo(() => new THREE.Vector3(), []),
+    up = useMemo(() => new THREE.Vector3(), []),
+    boundOrbit = useRef(null),
+    lastUserAction = useRef(performance.now());
+  const reduced = usePrefersReducedMotion();
+
+  useEffect(() => {
+    moving.current = true;
+    focused.current = selectedId;
+    focusPulse.current = reduced ? 0 : 1;
+    positionVelocity.current.set(0, 0, 0);
+    targetVelocity.current.set(0, 0, 0);
+    previous.current.set(0, 0, 0);
+  }, [selectedId, homeToken, settings.compressed, size.width, size.height, reduced]);
+
+  useEffect(() => {
+    if (panelOpen || storyMode)
+      camera.setViewOffset(
+        size.width,
+        size.height,
+        storyMode || size.width < 560 ? 0 : size.width < 850 ? 105 : 75,
+        storyMode
+          ? size.height * 0.17
+          : size.width < 560
+            ? size.height * 0.22
+            : 0,
+        size.width,
+        size.height,
+      );
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+    return () => camera.clearViewOffset();
+  }, [camera, panelOpen, storyMode, size.width, size.height]);
+
+  useFrame((state, dt) => {
+    const orbit = controls.current;
+    if (!orbit) return;
+
+    if (boundOrbit.current !== orbit) {
+      boundOrbit.current?.removeEventListener?.("start", boundOrbit.current.__ehStart);
+      boundOrbit.current?.removeEventListener?.("end", boundOrbit.current.__ehEnd);
+      const start = () => {
+        lastUserAction.current = performance.now();
+      };
+      const end = () => {
+        lastUserAction.current = performance.now();
+      };
+      orbit.addEventListener?.("start", start);
+      orbit.addEventListener?.("end", end);
+      orbit.__ehStart = start;
+      orbit.__ehEnd = end;
+      boundOrbit.current = orbit;
+    }
+
+    const body = engine.getBody(selectedId);
+    if (body) {
+      target.current.set(...bodyPosition(body, engine, settings.compressed));
+      const r = visualRadius(body),
+        distance = Math.max(
+          r * 7,
+          body.type === "black hole"
+            ? r * 10
+            : storyMode && body.id === "proto-earth"
+              ? 4
+              : 0.5,
+        );
+      offset.current.set(distance * 0.9, distance * 0.4, distance);
+      orbit.minDistance = Math.max(r * 1.85, 0.35);
+      if (!moving.current) {
+        temp.copy(target.current).sub(previous.current);
+        camera.position.add(temp);
+        orbit.target.add(temp);
+      }
+    } else {
+      target.current.set(0, 0, 0);
+      offset.current
+        .set(
+          settings.compressed ? 13 : 37,
+          settings.compressed ? 17 : 45,
+          settings.compressed ? 21 : 58,
+        )
+        .multiplyScalar(Math.max(1, (1.25 * size.height) / size.width));
+      orbit.minDistance = 0.1;
+      if (focused.current) {
+        moving.current = true;
+        focused.current = null;
+      }
+    }
+
+    if (moving.current) {
+      const stiffness = reduced ? 999 : 24;
+      const damping = reduced ? 999 : 9.5;
+      focusPulse.current = Math.max(0, focusPulse.current - dt * (reduced ? 8 : 2.8));
+      const approach = 1 + focusPulse.current * 0.08;
+      desired.current.copy(target.current).addScaledVector(offset.current, approach);
+
+      temp.copy(desired.current).sub(camera.position);
+      positionVelocity.current.addScaledVector(temp, stiffness * dt);
+      positionVelocity.current.multiplyScalar(Math.exp(-damping * dt));
+      camera.position.addScaledVector(positionVelocity.current, dt);
+
+      temp.copy(target.current).sub(orbit.target);
+      targetVelocity.current.addScaledVector(temp, stiffness * dt);
+      targetVelocity.current.multiplyScalar(Math.exp(-damping * dt));
+      orbit.target.addScaledVector(targetVelocity.current, dt);
+
+      if (
+        camera.position.distanceTo(desired.current) < 0.012 &&
+        positionVelocity.current.lengthSq() < 0.00004
+      ) {
+        moving.current = false;
+        positionVelocity.current.set(0, 0, 0);
+        targetVelocity.current.set(0, 0, 0);
+      }
+    }
+
+    orbit.enabled = !building;
+    orbit.update();
+
+    const idle =
+      !reduced &&
+      !building &&
+      !storyMode &&
+      !moving.current &&
+      performance.now() - lastUserAction.current > 1600;
+    if (idle) {
+      camera.getWorldDirection(temp);
+      right.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+      up.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+      const t = state.clock.elapsedTime;
+      const distanceFactor = Math.max(camera.position.distanceTo(orbit.target), 1);
+      const sway = distanceFactor * 0.0022;
+      const lift = distanceFactor * 0.001;
+      camera.position.addScaledVector(right, Math.sin(t * 0.19) * sway);
+      camera.position.addScaledVector(up, Math.cos(t * 0.13) * lift);
+    }
+
+    const recent = effects.length ? effects[effects.length - 1] : null;
+    if (recent) {
+      const age = (Date.now() - recent.at) / 1000;
+      const duration = 1.0;
+      if (age >= 0 && age < duration && !reduced) {
+        const envelope = Math.pow(1 - age / duration, 2);
+        const intensity =
+          recent.type === "supernova" ? 0.065 : recent.type === "solarFlare" ? 0.018 : 0.032;
+        const n1 = Math.sin(state.clock.elapsedTime * 72.0) * envelope * intensity;
+        const n2 = Math.cos(state.clock.elapsedTime * 61.0) * envelope * intensity * 0.7;
+        right.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+        up.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+        camera.position.addScaledVector(right, n1);
+        camera.position.addScaledVector(up, n2);
+      }
+    }
+
+    previous.current.copy(target.current);
+  });
+  return null;
+}
+
+function BuildPlacement({ engine, type, settings, onPlace, onReadout }) {
+  const { camera, raycaster, pointer, gl } = useThree(),
+    ghost = useRef(),
+    arrow = useRef(),
+    start = useRef(null),
+    hit = useMemo(() => new THREE.Vector3(), []);
+  const plane = useMemo(
+      () => new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+      [],
+    ),
+    velocity = useRef(new Vector3()),
+    position = useRef(new Vector3());
+  const [trajectory, setTrajectory] = useState([]),
+    last = useRef(0);
+  useEffect(() => {
+    const down = (e) => {
+      if (e.button !== 0) return;
+      raycaster.setFromCamera(pointer, camera);
+      if (raycaster.ray.intersectPlane(plane, hit)) {
+        start.current = hit.clone();
+        position.current = unmapPosition(hit, settings.compressed);
+      }
+    };
+    const up = (e) => {
+      if (e.button !== 0 || !start.current) return;
+      onPlace(type, position.current.clone(), velocity.current.clone());
+      start.current = null;
+    };
+    const cancel = () => {
+      start.current = null;
+    };
+    gl.domElement.addEventListener("pointerdown", down);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+    window.addEventListener("blur", cancel);
+    gl.domElement.addEventListener("contextmenu", cancel);
+    return () => {
+      gl.domElement.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      window.removeEventListener("blur", cancel);
+      gl.domElement.removeEventListener("contextmenu", cancel);
+    };
+  }, [
+    camera,
+    engine,
+    gl,
+    hit,
+    onPlace,
+    plane,
+    pointer,
+    raycaster,
+    settings.compressed,
+    type,
+  ]);
+  useFrame(({ clock }) => {
+    raycaster.setFromCamera(pointer, camera);
+    if (!raycaster.ray.intersectPlane(plane, hit)) return;
+    const visual = start.current || hit;
+    if (!start.current) {
+      position.current = unmapPosition(hit, settings.compressed);
+      velocity.current.set(0, 0, 0);
+    } else {
+      const end = unmapPosition(hit, settings.compressed);
+      velocity.current.copy(end).sub(position.current).multiplyScalar(3);
+    }
+    ghost.current?.position.copy(visual);
+    if (arrow.current) {
+      const direction = hit.clone().sub(visual),
+        length = direction.length();
+      arrow.current.position.copy(visual);
+      arrow.current.setDirection(
+        length ? direction.normalize() : new THREE.Vector3(1, 0, 0),
+      );
+      arrow.current.setLength(Math.max(length, 0.001), 0.16, 0.08);
+    }
+    if (clock.elapsedTime - last.current > 0.1) {
+      last.current = clock.elapsedTime;
+      const body = new CelestialBody({
+        position: position.current,
+        velocity: velocity.current,
+      });
+      setTrajectory(
+        engine
+          .predictTrajectory(body, 80, 0.15)
+          .map((p) => mapPosition(Vector3.from(p), settings.compressed)),
+      );
+      onReadout({
+        speed: velocity.current.length(),
+        position: position.current.toArray(),
+      });
+    }
+  });
+  return (
+    <>
+      <gridHelper
+        args={[40, 40, "#2b4f5b", "#142731"]}
+        position={[0, -0.01, 0]}
+      />
+      <mesh ref={ghost}>
+        <sphereGeometry args={[0.1, 24, 16]} />
+        <meshBasicMaterial
+          color="#9de0db"
+          transparent
+          opacity={0.5}
+          wireframe
+        />
+      </mesh>
+      <arrowHelper
+        ref={arrow}
+        args={[new THREE.Vector3(1, 0, 0), new THREE.Vector3(), 1, "#92e1d8"]}
+      />
+      {trajectory.length > 1 && (
+        <Line
+          points={trajectory}
+          color="#8adad4"
+          dashed
+          dashSize={0.07}
+          gapSize={0.06}
+          lineWidth={1}
+          transparent
+          opacity={0.7}
+        />
+      )}
+    </>
+  );
+}
+
+function ScreenCinematicFX({ effects, settings }) {
+  const group = useRef();
+  const flash = useRef();
+  const ring = useRef();
+  const red = useRef();
+  const cyan = useRef();
+  const blue = useRef();
+  const { camera, size } = useThree();
+  const reduced = usePrefersReducedMotion();
+  const direction = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame(({ clock }) => {
+    if (!group.current) return;
+    camera.getWorldDirection(direction);
+    group.current.position.copy(camera.position).addScaledVector(direction, 1.0);
+    group.current.quaternion.copy(camera.quaternion);
+    const height = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
+    const width = height * (size.width / Math.max(size.height, 1));
+    group.current.scale.set(width / 2, height / 2, 1);
+
+    const latest = effects.length ? effects[effects.length - 1] : null;
+    const age = latest ? Math.max(0, (Date.now() - latest.at) / 1000) : 999;
+    const duration = latest?.type === "supernova" ? 1.8 : 1.05;
+    if (!latest || age >= duration || reduced) {
+      if (flash.current) flash.current.material.opacity = reduced ? 0 : 0;
+      if (ring.current) ring.current.material.opacity = 0;
+      if (red.current) red.current.material.opacity = 0;
+      if (cyan.current) cyan.current.material.opacity = 0;
+      if (blue.current) blue.current.material.opacity = 0;
+      return;
+    }
+
+    const t = age / duration;
+    const impact =
+      latest.type === "supernova" ? 1 :
+      latest.type === "solarFlare" ? 0.48 :
+      latest.type === "tidalDisruption" ? 0.68 : 0.62;
+    const flashAmount = Math.pow(Math.max(0, 1 - t * 2.6), 2) * impact * 0.18;
+    const wave = Math.min(1.6, 0.15 + THREE.MathUtils.smootherstep(t, 0, 0.92) * 1.75);
+    const ringOpacity = Math.sin(Math.min(1, t) * Math.PI) * (1 - t * 0.35) * impact * 0.38;
+    const aberration = Math.sin(Math.min(1, t) * Math.PI) * impact * 0.018;
+
+    if (flash.current) flash.current.material.opacity = flashAmount;
+    if (ring.current) {
+      ring.current.scale.setScalar(wave);
+      ring.current.material.opacity = ringOpacity;
+    }
+    if (red.current) {
+      red.current.position.x = aberration * -1.2;
+      red.current.material.opacity = aberration;
+    }
+    if (cyan.current) {
+      cyan.current.position.x = aberration;
+      cyan.current.material.opacity = aberration;
+    }
+    if (blue.current) {
+      blue.current.position.x = aberration * 0.7;
+      blue.current.material.opacity = aberration * 0.8;
+    }
+  });
+
+  return (
+    <group ref={group} renderOrder={999}>
+      <mesh ref={flash}>
+        <planeGeometry args={[2, 2]} />
+        <meshBasicMaterial
+          color="#f7e5c6"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={ring} position={[0, 0, 0.01]}>
+        <ringGeometry args={[0.28, 0.292, 96]} />
+        <meshBasicMaterial
+          color="#a8e4e5"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <mesh ref={red} position={[0, 0, -0.01]}>
+        <planeGeometry args={[2.02, 2.02]} />
+        <meshBasicMaterial
+          color="#ff5f67"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={cyan} position={[0, 0, -0.012]}>
+        <planeGeometry args={[2, 2]} />
+        <meshBasicMaterial
+          color="#6fe9ff"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+      <mesh ref={blue} position={[0, 0, -0.014]}>
+        <planeGeometry args={[2.01, 2.01]} />
+        <meshBasicMaterial
+          color="#8a7dff"
+          transparent
+          opacity={0}
+          depthWrite={false}
+          depthTest={false}
+          blending={THREE.AdditiveBlending}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function Scene({
+  engine,
+  selectedId,
+  onSelect,
+  settings,
+  homeToken,
+  buildTool,
+  onPlace,
+  onReadout,
+  sceneRevision,
+  effects,
+  onFrame,
+  panelOpen,
+  storyMode,
+}) {
+  const reducedMotion = usePrefersReducedMotion();
+  const cinematicIntensity = Math.min(
+    1,
+    effects.reduce((max, effect) => {
+      const weight =
+        effect.type === "supernova"
+          ? 1
+          : effect.type === "tidalDisruption"
+            ? 0.85
+            : effect.type === "solarFlare"
+              ? 0.7
+              : effect.type === "impactWave"
+                ? 0.65
+                : effect.type === "collision"
+                  ? 0.55
+                  : 0.35;
+      return Math.max(max, weight);
+    }, 0),
+  );
+
+  const controls = useRef(),
+    frameSample = useRef({ frames: 0, elapsed: 0 });
+  const [orbitRevision, setOrbitRevision] = useState(0);
+  const [cameraInteracting, setCameraInteracting] = useState(false);
+
+  // Bloom/chromatic aberration can shimmer on high-frequency textures while
+  // the camera is actively changing scale/orientation. Disable only the
+  // post-processing stage during the gesture; the actual 3D scene keeps
+  // rendering normally. Re-enable shortly after the gesture ends.
+  useEffect(() => {
+    const orbit = controls.current;
+    if (!orbit) return undefined;
+
+    let reenableTimer = null;
+
+    const onStart = () => {
+      if (reenableTimer) {
+        clearTimeout(reenableTimer);
+        reenableTimer = null;
+      }
+      setCameraInteracting(true);
+    };
+
+    const onEnd = () => {
+      if (reenableTimer) clearTimeout(reenableTimer);
+      reenableTimer = setTimeout(() => {
+        reenableTimer = null;
+        setCameraInteracting(false);
+      }, 140);
+    };
+
+    orbit.addEventListener?.("start", onStart);
+    orbit.addEventListener?.("end", onEnd);
+
+    return () => {
+      if (reenableTimer) clearTimeout(reenableTimer);
+      orbit.removeEventListener?.("start", onStart);
+      orbit.removeEventListener?.("end", onEnd);
+    };
+  }, []);
+  useEffect(() => {
+    const interval = setInterval(() => setOrbitRevision((n) => n + 1), 1200);
+    return () => clearInterval(interval);
+  }, []);
+  useFrame((_, dt) => {
+    engine.update(dt);
+    frameSample.current.frames++;
+    frameSample.current.elapsed += dt;
+    if (frameSample.current.elapsed > 1) {
+      onFrame(
+        Math.round(frameSample.current.frames / frameSample.current.elapsed),
+      );
+      frameSample.current = { frames: 0, elapsed: 0 };
+    }
+  }, -2);
+  const bodies = engine.getBodies();
+  return (
+    <>
+      <SpaceBackground settings={settings} />
+
+      <CinematicParticles
+        quality={settings.quality}
+        radius={90}
+        reducedMotion={reducedMotion}
+      />
+
+      <ambientLight intensity={0.25} />
+      <hemisphereLight args={["#acc3d9", "#1c1713", 0.42]} />
+      {settings.orbits &&
+        bodies
+          .filter((b) => b.type === "planet")
+          .map((body) => (
+            <OrbitPath
+              key={body.id}
+              body={body}
+              engine={engine}
+              compressed={settings.compressed}
+              revision={`${orbitRevision}-${sceneRevision}`}
+            />
+          ))}
+      {settings.habitable && (
+        <HabitableZone engine={engine} compressed={settings.compressed} />
+      )}
+      {bodies.map((body) => (
+        <PlanetBody
+          key={body.id}
+          body={body}
+          engine={engine}
+          selected={selectedId === body.id}
+          onSelect={onSelect}
+          settings={settings}
+          building={!!buildTool}
+        />
+      ))}
+      {settings.links &&
+        bodies
+          .filter((b) => b.type === "wormhole")
+          .map((body) => {
+            const peer = bodies.find(
+              (b) =>
+                b !== body &&
+                b.metadata.wormholeLink === body.metadata.wormholeLink,
+            );
+            return peer && body.id < peer.id ? (
+              <Line
+                key={body.id}
+                points={[
+                  mapPosition(body.position, settings.compressed),
+                  mapPosition(peer.position, settings.compressed),
+                ]}
+                color="#8475c6"
+                dashed
+                dashSize={0.06}
+                gapSize={0.1}
+                transparent
+                opacity={0.4}
+              />
+            ) : null;
+          })}
+      {effects.map((effect) => (
+        <Effect
+          key={effect.id}
+          effect={effect}
+          engine={engine}
+          compressed={settings.compressed}
+          settings={settings}
+        />
+      ))}
+      <fog attach="fog" args={["#060a10", settings.quality === "high" ? 130 : settings.quality === "medium" ? 105 : 85, 520]} />
+      <OrbitControls
+        ref={controls}
+        makeDefault
+        enableDamping
+        dampingFactor={0.07}
+        maxDistance={200}
+        enablePan
+        zoomSpeed={0.8}
+        rotateSpeed={0.6}
+      />
+      <CameraController
+        engine={engine}
+        selectedId={selectedId}
+        homeToken={homeToken}
+        settings={settings}
+        controls={controls}
+        building={!!buildTool}
+        panelOpen={panelOpen}
+        storyMode={storyMode}
+        effects={effects}
+      />
+      <ScreenCinematicFX effects={effects} settings={settings} />
+
+      <CinematicPostFX
+        quality={settings.quality}
+        intensity={cinematicIntensity}
+        reducedMotion={reducedMotion}
+        enabled={!cameraInteracting}
+      />
+
+      {buildTool && (
+        <BuildPlacement
+          engine={engine}
+          type={buildTool}
+          settings={settings}
+          onPlace={onPlace}
+          onReadout={onReadout}
+        />
+      )}
+    </>
+  );
+}
+
+export default function Universe(props) {
+  return (
+    <>
+      <Canvas
+        className={props.buildTool ? "universe placing" : "universe"}
+        style={{ touchAction: props.buildTool ? "none" : "auto" }}
+        camera={{ position: [13, 17, 21], fov: 43, near: 0.05, far: 600 }}
+        dpr={
+          props.settings.quality === "high"
+            ? [1, 1.75]
+            : props.settings.quality === "medium"
+              ? [1, 1.25]
+              : [0.75, 1]
+        }
+        gl={{
+          antialias: props.settings.quality !== "low",
+          alpha: false,
+          powerPreference: "high-performance",
+        }}
+        onCreated={({ gl }) => {
+          gl.setClearColor("#060a10");
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = props.settings.quality === "high" ? 1.04 : 0.98;
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+        }}
+      >
+        <Scene {...props} />
+      </Canvas>
+      <LoadingStatus />
+    </>
+  );
+}
+
+function LoadingStatus() {
+  const { active, progress } = useProgress();
+  return active ? (
+    <div className="asset-status" role="status">
+      Loading observatory maps · {Math.round(progress)}%
+    </div>
+  ) : null;
+}
