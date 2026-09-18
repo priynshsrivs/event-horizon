@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
+import { playTone } from "./ui/audio.js";
 import "./SplashScreen.css";
 
 const TRIVIA_FACTS = [
@@ -6,109 +7,109 @@ const TRIVIA_FACTS = [
     id: 1,
     mark: "01",
     text: "Event Horizon: The point of no return where gravitational escape velocity equals the speed of light.",
-    x: "11vw",
-    y: "18vh",
-    width: "285px",
+    x: "8vw",
+    y: "16vh",
+    width: "280px",
     rotate: "-1.5deg",
-    size: "13px",
-    delay: "0.15s",
+    size: "12px",
+    delay: "0.1s",
   },
   {
     id: 2,
     mark: "02",
     text: "Gravitational Time Dilation: Clocks in intense gravitational fields tick markedly slower relative to distant observers.",
-    x: "7vw",
-    y: "64vh",
-    width: "295px",
+    x: "6vw",
+    y: "62vh",
+    width: "290px",
     rotate: "1.2deg",
     size: "12px",
-    delay: "0.35s",
+    delay: "0.3s",
   },
   {
     id: 3,
     mark: "03",
     text: "Frame Dragging: Rotating Kerr black holes physically drag the spacetime fabric itself in the ergosphere.",
-    x: "47vw",
-    y: "11vh",
-    width: "275px",
+    x: "42vw",
+    y: "10vh",
+    width: "270px",
     rotate: "-0.8deg",
     size: "12px",
-    delay: "0.25s",
+    delay: "0.2s",
   },
   {
     id: 4,
     mark: "04",
     text: "Photon Sphere: At 1.5 Schwarzschild radii, photons are forced into unstable circular orbits around the core.",
-    x: "73vw",
-    y: "16vh",
-    width: "265px",
+    x: "72vw",
+    y: "14vh",
+    width: "260px",
     rotate: "1.8deg",
     size: "11px",
-    delay: "0.5s",
+    delay: "0.45s",
   },
   {
     id: 5,
     mark: "05",
     text: "Tidal Disruption: Infalling bodies reaching the Roche limit are stretched into stellar filaments via differential gravity.",
-    x: "38vw",
-    y: "79vh",
-    width: "285px",
+    x: "36vw",
+    y: "80vh",
+    width: "280px",
     rotate: "-1deg",
     size: "12px",
-    delay: "0.4s",
+    delay: "0.35s",
   },
   {
     id: 6,
     mark: "06",
     text: "Relativistic Beaming: Doppler boosting concentrates the luminosity of accretion matter orbiting toward the observer.",
-    x: "67vw",
-    y: "75vh",
-    width: "275px",
+    x: "68vw",
+    y: "76vh",
+    width: "270px",
     rotate: "1.5deg",
     size: "11px",
-    delay: "0.6s",
+    delay: "0.5s",
   },
   {
     id: 7,
     mark: "07",
     text: "Hawking Radiation: Quantum vacuum fluctuations near the horizon cause black holes to radiate energy and evaporate.",
-    x: "21vw",
-    y: "83vh",
-    width: "265px",
+    x: "18vw",
+    y: "82vh",
+    width: "260px",
     rotate: "0.5deg",
     size: "11px",
-    delay: "0.45s",
+    delay: "0.4s",
   },
   {
     id: 8,
     mark: "08",
     text: "Innermost Stable Circular Orbit: The final threshold where stable circular orbital motion remains mathematically possible.",
-    x: "15vw",
-    y: "40vh",
-    width: "255px",
+    x: "12vw",
+    y: "38vh",
+    width: "250px",
     rotate: "-2deg",
     size: "11px",
-    delay: "0.3s",
+    delay: "0.25s",
   },
 ];
 
 export default function SplashScreen({ onDismiss }) {
   const [stage, setStage] = useState(1);
-  const [entering, setEntering] = useState(false);
   const containerRef = useRef(null);
 
   const triggerEnter = useCallback(() => {
     if (stage > 1) return;
-    setEntering(true);
+    playTone("click", 0.4);
     setStage(2);
 
     const timer1 = setTimeout(() => {
       setStage(3);
+      playTone("selection", 0.3);
       const timer2 = setTimeout(() => {
         onDismiss?.();
-      }, 950);
+      }, 850);
       return () => clearTimeout(timer2);
-    }, 750);
+    }, 650);
 
     return () => clearTimeout(timer1);
   }, [stage, onDismiss]);
@@ -126,13 +127,6 @@ export default function SplashScreen({ onDismiss }) {
 
     el.style.setProperty("--pointer-x", `${x}px`);
     el.style.setProperty("--pointer-y", `${y}px`);
-
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-    const dist = Math.hypot(x - cx, y - cy);
-    const maxDist = Math.hypot(cx, cy) || 1;
-    const proximity = Math.max(0.12, 1 - (dist / maxDist) * 0.88);
-    el.style.setProperty("--splash-title-reveal", proximity.toFixed(2));
   }, []);
 
   const handleKeyDown = useCallback(
@@ -156,10 +150,6 @@ export default function SplashScreen({ onDismiss }) {
       const cy = window.innerHeight / 2;
       el.style.setProperty("--pointer-x", `${cx}px`);
       el.style.setProperty("--pointer-y", `${cy}px`);
-      el.style.setProperty("--splash-title-reveal", "0.65");
-      el.style.setProperty("--nasa-image", "url('/textures/galaxy.jpg')");
-      el.style.setProperty("--splash-stage-two-image", "url('/textures/galaxy.jpg')");
-      el.style.setProperty("--splash-stage-three-image", "url('/textures/galaxy.jpg')");
     }
 
     const keyListener = (e) => {
@@ -180,10 +170,9 @@ export default function SplashScreen({ onDismiss }) {
       aria-modal="true"
       aria-label="Event Horizon Landing"
       tabIndex={0}
-      className={`splash-screen stage-${stage} ${entering ? "entering" : ""}`}
+      className={`splash-screen stage-${stage}`}
       onMouseMove={handlePointerMove}
       onTouchMove={handlePointerMove}
-      onClick={triggerEnter}
       onKeyDown={handleKeyDown}
     >
       <div className="splash-blackout" />
@@ -193,7 +182,22 @@ export default function SplashScreen({ onDismiss }) {
       <div className="splash-glow" />
       <div className="splash-cursor-ring" aria-hidden="true" />
 
-      {/* Interactive Kerr Black Hole */}
+      {/* Skip / Close button */}
+      <button
+        type="button"
+        className="splash-close-btn"
+        title="Skip landing and enter simulation (Esc)"
+        aria-label="Skip landing and enter simulation"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDismiss?.();
+        }}
+      >
+        <span aria-hidden="true">✕</span>
+        <span>SKIP</span>
+      </button>
+
+      {/* Kerr Black Hole Centerpiece */}
       <div className="splash-blackhole-wrap" aria-hidden="true">
         <div className="splash-blackhole-halo" />
         <div className="splash-blackhole-core" />
@@ -206,7 +210,7 @@ export default function SplashScreen({ onDismiss }) {
         </div>
       </div>
 
-      {/* Floating Astrophysics Trivia Layer */}
+      {/* Astrophysics Trivia Layer */}
       <div className="splash-trivia-layer">
         {TRIVIA_FACTS.map((fact) => (
           <div
@@ -235,16 +239,16 @@ export default function SplashScreen({ onDismiss }) {
             <h1 className="splash-title">EVENT HORIZON</h1>
           </div>
           <div className="splash-stage-one-subtitle">
-            CLICK ANYWHERE OR PRESS SPACE TO ENTER OBSERVATORY
+            ORBITAL MECHANICS & GENERAL RELATIVITY SIMULATOR
           </div>
           <div className="splash-tagline">
-            N-BODY GRAVITATION <b>·</b> KERR METRIC LENSING <b>·</b> RELATIVISTIC JETS
+            N-BODY GRAVITATION <b>·</b> KERR LENSING <b>·</b> RELATIVISTIC JETS
           </div>
           <div className="splash-terminal">
-            <div>&gt; KERR_METRIC: SOLVED (BOYER-LINDQUIST)</div>
-            <div>&gt; ACCRETION_DISKS: MAGNETOROTATIONAL DYNAMICS</div>
-            <div>&gt; SCHWARZSCHILD_RADIUS: 2GM/c² ONLINE</div>
-            <div>&gt; STATUS: ALL SENSORS NOMINAL</div>
+            <div>&gt; KERR_METRIC: BOYER-LINDQUIST ONLINE</div>
+            <div>&gt; ACCRETION_DISKS: MAGNETOROTATIONAL MODEL</div>
+            <div>&gt; TIME_DILATION: ACTIVE LORENTZ FRAMES</div>
+            <div>&gt; STATUS: ALL SIMULATION SENSORS NOMINAL</div>
           </div>
           <button
             type="button"
@@ -257,22 +261,21 @@ export default function SplashScreen({ onDismiss }) {
             <span className="splash-cta-label">ENTER OBSERVATORY</span>
             <span className="splash-cta-chevron" aria-hidden="true">→</span>
           </button>
-          <div className="splash-hint">CLICK ANYWHERE // PRESS ENTER OR SPACE</div>
+          <div className="splash-hint">PRESS ENTER OR SPACE TO COMMENCE</div>
         </div>
       </div>
 
       {/* HUD Telemetry and Overlays */}
       <div className="splash-stage-one-label">
         <span>SYSTEM BOOT // v1.0</span>
-        <span>SIMULATION ENGINE: ACTIVE</span>
-        <span>ASTRODYNAMICS CORE: VERIFIED</span>
+        <span>ASTRODYNAMICS CORE: ACTIVE</span>
       </div>
       <div className="splash-stage-one-note">
-        <span>LOCAL COMPUTE READY</span>
         <span>GPU ACCELERATED</span>
+        <span>LOCAL COMPUTE</span>
       </div>
       <div className="splash-nasa-credit">
-        <span>DEEP SPACE OBSERVATORY TELEMETRY</span>
+        <span>DEEP SPACE TELEMETRY</span>
       </div>
 
       {/* Warp / Stage 3 Enter Flash & Loading */}
@@ -286,4 +289,3 @@ export default function SplashScreen({ onDismiss }) {
     </div>
   );
 }
-
