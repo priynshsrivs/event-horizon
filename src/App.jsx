@@ -13,6 +13,7 @@ import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
 import { playTone } from "./ui/audio.js";
 import { readPreferences, writePreferences } from "./ui/preferences.js";
+import SplashScreen from "./SplashScreen.jsx";
 
 const DEFAULT_SETTINGS = {
   orbits: true,
@@ -1027,6 +1028,7 @@ export default function App() {
     [samples, setSamples] = useState([]),
     [fps, setFps] = useState(0);
   const [showSettings, setShowSettings] = useState(false),
+    [showSplash, setShowSplash] = useState(true),
     [showObjects, setShowObjects] = useState(true),
     [hint, setHint] = useState(() => {
       try {
@@ -1373,6 +1375,7 @@ export default function App() {
         />
       </RenderBoundary>
       <div className="vignette" />
+      {showSplash && <SplashScreen onDismiss={() => setShowSplash(false)} />}
       <header className="topbar">
         <a
           className="brand"
@@ -1398,6 +1401,14 @@ export default function App() {
           <span className="fps">
             {fps || "—"} <small>FPS</small>
           </span>
+          <button
+            className={`icon-button ${showSplash ? "active" : ""}`}
+            title="Mission Landing / Overview"
+            aria-label="Mission Landing / Overview"
+            onClick={() => setShowSplash((v) => !v)}
+          >
+            <Icon name="info" />
+          </button>
           <button
             className={`icon-button ${settings.sound ? "active" : ""}`}
             title={settings.sound ? "Mute sound" : "Enable sound"}
