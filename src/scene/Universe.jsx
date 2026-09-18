@@ -606,17 +606,35 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
   );
 }
 
-function OrbitPath({ body, engine, compressed, revision }) {
-  const points = useMemo(() => {
-    const primary = engine.getBody(body.metadata.primaryId || "sun");
-    if (!primary || primary === body || body.type === "moon") return [];
+function findPrimary(body, engine) {
+  if (body.metadata?.primaryId) {
+    const p = engine.getBody(body.metadata.primaryId);
+    if (p && p !== body) return p;
+  }
+  const sun = engine.getBody("sun");
+  if (sun && sun !== body) return sun;
+  let dominant = null,
+    maxMass = 0;
+  for (const b of engine.bodies) {
+    if (b !== body && b.enabled && b.active && b.mass > maxMass) {
+      maxMass = b.mass;
+      dominant = b;
+    }
+  }
+  return dominant;
+}
+
+function OrbitPath({ body, engine, selected, compressed, revision }) {
+  const geometryData = useMemo(() => {
+    const primary = findPrimary(body, engine);
+    if (!primary || primary === body) return null;
     const elements = engine.calculateOrbitalElements(body, primary);
     if (
       !elements?.bound ||
-      elements.eccentricity > 0.97 ||
-      elements.semiMajorAxis > 500
+      elements.eccentricity > 0.98 ||
+      elements.semiMajorAxis > 1000
     )
-      return [];
+      return null;
     const r = body.position.clone().sub(primary.position),
       v = body.velocity.clone().sub(primary.velocity),
       normal = r.clone().cross(v).normalize();
@@ -626,33 +644,68 @@ function OrbitPath({ body, engine, compressed, revision }) {
       4 * Math.PI ** 2 * engine.gravityMultiplier * (body.mass + primary.mass);
     const ev = v.clone().cross(r.clone().cross(v)).divideScalar(mu).sub(x),
       omega = Math.atan2(ev.dot(y), ev.dot(x));
-    const result = [];
-    for (let i = 0; i <= 180; i++) {
-      const a = (i / 180) * TAU,
+
+    const segments = 180;
+    const positions = new Float32Array(segments * 3);
+    const isMoon = body.type === "moon";
+    const scaleFactor = isMoon && compressed ? 160 : 1;
+
+    for (let i = 0; i < segments; i++) {
+      const a = (i / segments) * TAU,
         distance =
           (elements.semiMajorAxis * (1 - elements.eccentricity ** 2)) /
           (1 + elements.eccentricity * Math.cos(a - omega));
-      result.push(
-        mapPosition(
+
+      if (isMoon && compressed) {
+        const center = mapPosition(primary.position, compressed);
+        positions[i * 3] =
+          center[0] +
+          (x.x * Math.cos(a) + y.x * Math.sin(a)) * distance * scaleFactor;
+        positions[i * 3 + 1] =
+          center[1] +
+          (x.y * Math.cos(a) + y.y * Math.sin(a)) * distance * scaleFactor;
+        positions[i * 3 + 2] =
+          center[2] +
+          (x.z * Math.cos(a) + y.z * Math.sin(a)) * distance * scaleFactor;
+      } else {
+        const mapped = mapPosition(
           primary.position
             .clone()
             .addScaledVector(x, distance * Math.cos(a))
             .addScaledVector(y, distance * Math.sin(a)),
           compressed,
-        ),
-      );
+        );
+        positions[i * 3] = mapped[0];
+        positions[i * 3 + 1] = mapped[1];
+        positions[i * 3 + 2] = mapped[2];
+      }
     }
-    return result;
-  }, [body, engine, compressed, revision]);
-  return points.length ? (
-    <Line
-      points={points}
-      color={body.metadata.color || "#536472"}
-      lineWidth={0.6}
-      transparent
-      opacity={0.21}
-    />
-  ) : null;
+
+    const color = body.metadata.color || (selected ? "#a8e0e3" : "#7bbad7");
+    return { positions, count: segments, color };
+  }, [body, engine, selected, compressed, revision]);
+
+  if (!geometryData) return null;
+
+  return (
+    <lineLoop>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={geometryData.count}
+          array={geometryData.positions}
+          itemSize={3}
+        />
+      </bufferGeometry>
+      <lineBasicMaterial
+        color={geometryData.color}
+        transparent
+        opacity={selected ? 0.82 : 0.45}
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </lineLoop>
+  );
 }
 
 function HabitableZone({ engine, compressed }) {
@@ -1076,12 +1129,19 @@ function Scene({
       <hemisphereLight args={["#acc3d9", "#1c1713", 0.42]} />
       {settings.orbits &&
         bodies
-          .filter((b) => b.type === "planet")
+          .filter(
+            (b) =>
+              b.type !== "star" &&
+              b.type !== "black hole" &&
+              b.type !== "wormhole" &&
+              !b.metadata?.fragment,
+          )
           .map((body) => (
             <OrbitPath
               key={body.id}
               body={body}
               engine={engine}
+              selected={selectedId === body.id}
               compressed={settings.compressed}
               revision={`${orbitRevision}-${sceneRevision}`}
             />
