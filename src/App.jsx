@@ -375,7 +375,6 @@ function BodyEditor({ body, engine, onChange, notify }) {
       );
       return;
     }
-    engine.checkpoint();
     engine.updateBody(body.id, {
       mass: +values.mass,
       radius: (+values.radius * 1000) / AU_M,
@@ -535,28 +534,31 @@ function GodPanel({
             }
           />
         </label>
-        {engine.getBody("sun") && (
-          <label className="range-label">
-            Sun mass <output>{fmt(engine.getBody("sun").mass, 2)} M☉</output>
-            <input
-              aria-label="Sun mass"
-              type="range"
-              min="0.1"
-              max="5"
-              step="0.05"
-              value={engine.getBody("sun").mass}
-              onChange={(e) =>
-                act(() => {
-                  const mass = +e.target.value;
-                  engine.updateBody("sun", {
-                    mass,
-                    ...engine.stellarModel(mass),
-                  });
-                })
-              }
-            />
-          </label>
-        )}
+        {(() => {
+          const sun = engine.getBody("sun") || engine.getBody("Sun");
+          return sun ? (
+            <label className="range-label">
+              Sun mass <output>{fmt(sun.mass, 2)} M☉</output>
+              <input
+                aria-label="Sun mass"
+                type="range"
+                min="0.1"
+                max="5"
+                step="0.05"
+                value={sun.mass}
+                onChange={(e) =>
+                  act(() => {
+                    const mass = +e.target.value;
+                    engine.updateBody(sun.id, {
+                      mass,
+                      ...engine.stellarModel(mass),
+                    });
+                  })
+                }
+              />
+            </label>
+          ) : null;
+        })()}
       </section>
       <section className="panel-section">
         <h3>

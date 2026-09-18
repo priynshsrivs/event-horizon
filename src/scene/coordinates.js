@@ -1,4 +1,4 @@
-import { Vector3 } from "../physics/PhysicsEngine.js";
+import { Vector3, BODY_PRESETS, isStar } from "../physics/PhysicsEngine.js";
 
 export function mapPosition(position, compressed = true) {
   const r = Math.hypot(position.x, position.y, position.z);
@@ -45,6 +45,7 @@ export const visualRadius = (body) =>
       0.012,
       (Number.isFinite(Number(body.metadata.visualSize))
         ? Number(body.metadata.visualSize)
-        : 0.06) * 1.65,
+        : 0.06) * 1.65 * (isStar(body)
+          ? Math.max(0.5, Math.min(4, Math.cbrt(body.radius / (BODY_PRESETS[body.type]?.radius || body.radius)))) : 1),
     ),
   );

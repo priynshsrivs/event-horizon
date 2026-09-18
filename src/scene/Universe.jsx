@@ -13,6 +13,7 @@ import {
   CelestialBody,
   isStar,
   TAU,
+  blackbodyColor,
 } from "../physics/PhysicsEngine.js";
 import {
   mapPosition,
@@ -49,7 +50,10 @@ function useSafeTexture(name) {
               resolve(loaded);
             },
             undefined,
-            () => resolve(null),
+            () => {
+              textureRequests.delete(name);
+              resolve(null);
+            },
           );
         }),
       );
@@ -387,11 +391,13 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
     texture = useSafeTexture(body.metadata.texture);
   const radius = visualRadius(body),
     star = isStar(body),
-    color = body.metadata.color || "#8cb8c7";
+    color = star ? new THREE.Color().setRGB(...blackbodyColor(body.temperature), THREE.SRGBColorSpace) : body.metadata.color || "#8cb8c7";
+  const glowStrength = Math.min(1, Math.log1p(body.luminosity) / 8);
   const axis = useMemo(() => new THREE.Vector3(1, 0, 0), []),
     direction = useMemo(() => new THREE.Vector3(), []);
   useFrame((_, dt) => {
     if (!group.current) return;
+    group.current.visible = engine.bodies.includes(body);
     group.current.position.set(
       ...bodyPosition(body, engine, settings.compressed),
     );
@@ -422,10 +428,11 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
       }
     }
     if (light.current)
-      light.current.intensity = 18 + (body.metadata.activeSolarFlare ? 6 : 0);
+      light.current.intensity = Math.min(35, 18 * Math.sqrt(body.luminosity)) + (body.metadata.activeSolarFlare ? 6 : 0);
     if (cometTail.current) {
       const primary = engine.getBody(body.metadata.nearestStarId),
         length = body.metadata.tailLength || 0.05;
+      cometTail.current.visible = !!primary && body.metadata.tailLength > 0;
       if (primary) {
         direction
           .set(...bodyPosition(primary, engine, settings.compressed))
@@ -487,7 +494,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
                 <meshBasicMaterial
                   key={texture?.uuid || "fallback"}
                   map={texture}
-                  color={texture ? "#ffe5bf" : color}
+                  color={color}
                   toneMapped={false}
                 />
               ) : (
@@ -535,7 +542,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
       )}
       {star && (
         <>
-          <Glow color={color} size={radius * 3.8} opacity={0.28} />
+          <Glow color={color} size={radius * (3 + glowStrength * 2)} opacity={0.2 + glowStrength * 0.2} />
           {(body.id === "sun" ||
             engine.bodies.filter(isStar).indexOf(body) < 3) && (
             <pointLight
@@ -1040,6 +1047,7 @@ function Scene({
   onFrame,
   panelOpen,
   storyMode,
+  onFailure,
 }) {
   const controls = useRef(),
     frameSample = useRef({ frames: 0, elapsed: 0 });
@@ -1049,7 +1057,8 @@ function Scene({
     return () => clearInterval(interval);
   }, []);
   useFrame((_, dt) => {
-    engine.update(dt);
+    try { engine.update(dt); }
+    catch (error) { engine.pause(); onFailure(error.message); return; }
     frameSample.current.frames++;
     frameSample.current.elapsed += dt;
     if (frameSample.current.elapsed > 1) {
@@ -1158,9 +1167,12 @@ function Scene({
 }
 
 export default function Universe(props) {
+  const [failure, setFailure] = useState(null);
+  if (failure) return <div className="render-error" role="alert"><h2>The observatory paused.</h2><p>{failure}</p><button onClick={() => location.reload()}>Reload observatory</button></div>;
   return (
     <>
       <Canvas
+        fallback={<div className="render-error" role="alert">WebGL 2 is unavailable. Enable browser hardware acceleration and reload.</div>}
         className={props.buildTool ? "universe placing" : "universe"}
         camera={{ position: [13, 17, 21], fov: 43, near: 0.005, far: 1000 }}
         dpr={props.settings.quality === "high" ? [1, 1.75] : [1, 1.25]}
@@ -1170,12 +1182,17 @@ export default function Universe(props) {
           powerPreference: "high-performance",
         }}
         onCreated={({ gl }) => {
+          gl.domElement.addEventListener("webglcontextlost", (event) => {
+            event.preventDefault();
+            props.engine.pause();
+            setFailure("The graphics context was lost. Reload to recover the observatory.");
+          }, { once: true });
           gl.setClearColor("#060a10");
           gl.toneMapping = THREE.ACESFilmicToneMapping;
           gl.toneMappingExposure = 1;
         }}
       >
-        <Scene {...props} />
+        <Scene {...props} onFailure={setFailure} />
       </Canvas>
       <LoadingStatus />
     </>
