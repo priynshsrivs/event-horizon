@@ -74,8 +74,15 @@ export function bodyPosition(body, engine, compressed = true) {
 }
 
 export const visualRadius = (body) => {
+  const authoredRadius = Number(body?.metadata?.displayRadius);
+
+  // displayRadius is a presentation-only multiplier in scene units.
+  // Physical radius remains in body.radius (AU).
+  if (Number.isFinite(authoredRadius) && authoredRadius > 0) {
+    return Math.min(5, Math.max(0.012, authoredRadius));
+  }
+
   const rawSize = Number(body?.metadata?.visualSize);
   const size = Number.isFinite(rawSize) ? rawSize : 0.06;
-
   return Math.min(5, Math.max(0.012, size * 1.65));
 };
