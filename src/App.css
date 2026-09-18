@@ -10520,3 +10520,12 @@ body:has(.EH-SMOKE-BACKGROUND) {
    END NASA BLACK HOLE VIDEO
    ============================================================ */
 
+
+/* REMOVE STATIC BLACK-HOLE IMAGE FROM FIRST SPLASH PAGE ONLY */
+.splash-screen.stage-1 .splash-blackhole-wrap,
+.splash-screen.stage-1 .splash-blackhole-image {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
