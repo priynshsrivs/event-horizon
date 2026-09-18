@@ -277,43 +277,50 @@ export class PhysicsEngine {
   calculateAccelerations() {
     const bodies = this.bodies,
       effectiveG = G * this.gravityMultiplier,
-      soft2 = this.softening ** 2;
-    for (const b of bodies) b.acceleration.set(0, 0, 0);
-    for (let i = 0; i < bodies.length; i++) {
+      soft2 = this.softening ** 2,
+      len = bodies.length,
+      relativity = this.settings.relativityEnabled;
+
+    for (let i = 0; i < len; i++) {
+      bodies[i].acceleration.set(0, 0, 0);
+    }
+
+    for (let i = 0; i < len; i++) {
       const a = bodies[i];
       if (!a.active || !a.enabled) continue;
-      for (let j = i + 1; j < bodies.length; j++) {
+      const aPos = a.position,
+        aAcc = a.acceleration,
+        aMass = a.mass,
+        aSoft = a.metadata.softening || 0,
+        aIsBH = relativity && a.type === "black hole";
+
+      for (let j = i + 1; j < len; j++) {
         const b = bodies[j];
         if (!b.active || !b.enabled) continue;
-        const x = b.position.x - a.position.x,
-          y = b.position.y - a.position.y,
-          z = b.position.z - a.position.z;
-        // Plummer softening also supplies the explicitly extended halo gravity model.
-        const r2 =
-          x * x +
-          y * y +
-          z * z +
-          soft2 +
-          (a.metadata.softening || b.metadata.softening || 0) ** 2;
-        let f = effectiveG / (r2 * Math.sqrt(r2));
-        if (
-          this.settings.relativityEnabled &&
-          (a.type === "black hole" || b.type === "black hole")
-        ) {
-          // Bounded radial 1PN-inspired visualization model, NOT a GR integrator.
-          f *=
-            1 +
-            Math.min(
-              0.1,
-              (3 * this.schwarzschildRadius(a.mass + b.mass)) / Math.sqrt(r2),
-            );
+        const bPos = b.position;
+        const x = bPos.x - aPos.x,
+          y = bPos.y - aPos.y,
+          z = bPos.z - aPos.z;
+
+        const soft = aSoft || b.metadata.softening || 0;
+        const r2 = x * x + y * y + z * z + soft2 + (soft ? soft * soft : 0);
+        const r = Math.sqrt(r2);
+        let f = effectiveG / (r2 * r);
+
+        if (aIsBH || (relativity && b.type === "black hole")) {
+          f *= 1 + Math.min(0.1, (3 * this.schwarzschildRadius(aMass + b.mass)) / r);
         }
-        a.acceleration.x += x * f * b.mass;
-        a.acceleration.y += y * f * b.mass;
-        a.acceleration.z += z * f * b.mass;
-        b.acceleration.x -= x * f * a.mass;
-        b.acceleration.y -= y * f * a.mass;
-        b.acceleration.z -= z * f * a.mass;
+
+        const fBMass = f * b.mass;
+        const fAMass = f * aMass;
+        const bAcc = b.acceleration;
+
+        aAcc.x += x * fBMass;
+        aAcc.y += y * fBMass;
+        aAcc.z += z * fBMass;
+        bAcc.x -= x * fAMass;
+        bAcc.y -= y * fAMass;
+        bAcc.z -= z * fAMass;
       }
     }
   }
@@ -332,15 +339,15 @@ export class PhysicsEngine {
     for (const b of this.bodies) {
       if (!b.active || !b.enabled) continue;
       b.velocity.addScaledVector(b.acceleration, dt / 2);
+      const px = b.position.x, py = b.position.y, pz = b.position.z;
+      const vx = b.velocity.x, vy = b.velocity.y, vz = b.velocity.z;
       if (
-        ![
-          b.position.x,
-          b.position.y,
-          b.position.z,
-          b.velocity.x,
-          b.velocity.y,
-          b.velocity.z,
-        ].every(Number.isFinite)
+        !Number.isFinite(px) ||
+        !Number.isFinite(py) ||
+        !Number.isFinite(pz) ||
+        !Number.isFinite(vx) ||
+        !Number.isFinite(vy) ||
+        !Number.isFinite(vz)
       ) {
         b.position.copy(b._previous || new Vector3());
         b.velocity.set(0, 0, 0);
@@ -643,7 +650,7 @@ export class PhysicsEngine {
   }
   updateEnvironment(dt) {
     const sources = this.bodies.filter((b) => b.enabled && b.active);
-    for (const body of [...sources]) {
+    for (const body of sources) {
       if (!this.getBody(body.id)) continue;
       if (isStar(body)) {
         if (
