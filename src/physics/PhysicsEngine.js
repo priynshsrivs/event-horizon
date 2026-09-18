@@ -155,6 +155,9 @@ export {
   populateSolarSystem,
 };
 
+import { PhysicsWorkerClient } from "./worker/PhysicsWorkerClient.js";
+export { PhysicsWorkerClient };
+
 export class PhysicsEngine {
   constructor(options = {}) {
     this.bodies = [];
