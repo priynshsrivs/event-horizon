@@ -34,6 +34,7 @@ const TEXTURE_EXTENSIONS = {
   earth_clouds: ["png", "jpg", "jpeg", "webp"],
   saturn_ring: ["png", "jpg", "jpeg", "webp"],
   galaxy: ["jpg", "jpeg", "png", "webp"],
+  ton618: ["jpg", "jpeg", "png", "webp"],
 };
 
 function textureCandidates(name) {
@@ -567,7 +568,8 @@ function EarthLayers({ radius, body, engine, settings }) {
 function BlackHoleVisual({ body, radius, settings, engine }) {
   const ref = useRef(),
     reduced = usePrefersReducedMotion(),
-    galaxy = useSafeTexture("galaxy");
+    galaxy = useSafeTexture("galaxy"),
+    ton618 = useSafeTexture(body.metadata.texture === "ton618" ? "ton618" : null);
   const uniforms = useMemo(
     () => ({
       sky: { value: galaxy },
@@ -599,15 +601,27 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
         dt * (settings.frameDragging ? 0.04 + dragRate : 0.04);
     if (!reduced) uniforms.tick.value += dt;
   });
-  // Background-only lensing impostor: sample the actual Milky Way map with a
-  // radial deflection. This is an artistic screen-aligned approximation, not GR.
   return (
     <>
+      {ton618 && (
+        <Billboard>
+          <mesh scale={radius * 2.45}>
+            <planeGeometry args={[2, 2]} />
+            <meshBasicMaterial
+              map={ton618}
+              transparent
+              opacity={0.96}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        </Billboard>
+      )}
       <mesh>
-        <sphereGeometry args={[radius, 48, 32]} />
+        <sphereGeometry args={[radius * 0.82, 48, 32]} />
         <meshBasicMaterial color="#000003" />
       </mesh>
-      {settings.lensing && settings.quality !== "low" && galaxy && (
+      {settings.lensing && settings.quality !== "low" && galaxy && !ton618 && (
         <Billboard>
           <mesh scale={radius * 3.5}>
             <planeGeometry args={[2, 2]} />
