@@ -741,6 +741,8 @@ function EarthLayers({ radius, body, engine, settings }) {
 
 function BlackHoleVisual({ body, radius, settings, engine }) {
   const group = useRef();
+  const [videoReady, setVideoReady] = useState(false);
+
   const blackHoleVideo = useMemo(() => {
     if (typeof document === "undefined") return null;
 
@@ -772,25 +774,62 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
     return texture;
   }, [blackHoleVideo]);
 
+  // Keep the existing NASA still as a guaranteed visual fallback while the
+  // WebM buffers. The simulation never becomes invisible just because the
+  // animated asset is still loading.
+  const fallbackTexture = useSafeTexture("blackhole-nasa");
+
   useEffect(() => {
     if (!blackHoleVideo) return undefined;
+
+    let alive = true;
 
     const start = () => {
       blackHoleVideo.play().catch(() => {});
     };
 
-    blackHoleVideo.addEventListener("canplay", start);
+    const ready = () => {
+      if (!alive) return;
+      setVideoReady(true);
+      start();
+    };
+
+    const failed = () => {
+      if (!alive) return;
+      setVideoReady(false);
+    };
+
+    blackHoleVideo.addEventListener("loadeddata", ready);
+    blackHoleVideo.addEventListener("canplay", ready);
+    blackHoleVideo.addEventListener("error", failed);
     blackHoleVideo.load();
     start();
 
     return () => {
+      alive = false;
       blackHoleVideo.pause();
-      blackHoleVideo.removeEventListener("canplay", start);
+      blackHoleVideo.removeEventListener("loadeddata", ready);
+      blackHoleVideo.removeEventListener("canplay", ready);
+      blackHoleVideo.removeEventListener("error", failed);
       blackHoleTexture?.dispose();
       blackHoleVideo.removeAttribute("src");
       blackHoleVideo.load();
     };
   }, [blackHoleVideo, blackHoleTexture]);
+
+  useEffect(() => {
+    const resume = () => {
+      blackHoleVideo?.play().catch(() => {});
+    };
+
+    window.addEventListener("pointerdown", resume, { passive: true });
+    return () => window.removeEventListener("pointerdown", resume);
+  }, [blackHoleVideo]);
+
+  const activeTexture =
+    videoReady && blackHoleTexture
+      ? blackHoleTexture
+      : fallbackTexture;
 
   /*
    * NASA black-hole visualization.
@@ -829,7 +868,7 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
         >
           <planeGeometry args={[2, 2]} />
 
-          {blackHoleTexture ? (
+          {activeTexture ? (
             <shaderMaterial
               transparent
               depthWrite={false}
@@ -837,7 +876,7 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
               toneMapped={false}
               side={THREE.DoubleSide}
               uniforms={{
-                map: { value: blackHoleTexture },
+                map: { value: activeTexture },
               }}
               vertexShader={`
                 varying vec2 vUv;
