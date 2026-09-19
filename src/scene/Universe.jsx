@@ -300,7 +300,7 @@ function CinematicDust({ settings, reduced }) {
   );
 }
 
-function SpaceBackground({ settings }) {
+function SpaceBackground({ settings, voyagerActive = false }) {
   const galaxy = useSafeTexture("galaxy");
   const { scene, camera } = useThree();
   const reduced = usePrefersReducedMotion();
@@ -335,6 +335,7 @@ function SpaceBackground({ settings }) {
         : settings.quality === "medium"
           ? 0.80
           : 0.68;
+    const galaxyModeMultiplier = voyagerActive ? 0.04 : 1;
 
     if (galaxy) {
       if (scene.background !== galaxy) {
@@ -346,6 +347,7 @@ function SpaceBackground({ settings }) {
           0,
           galaxyFade *
             galaxyStrength *
+            galaxyModeMultiplier *
             (reduced
               ? 1
               : 0.985 +
@@ -1726,6 +1728,23 @@ function Effect({ effect, engine, compressed, settings }) {
   );
 }
 
+function voyagerDisplayPosition(body, progress = 0) {
+  if (!body) return [0, 0, 0];
+
+  const p = body.position.clone();
+  const physicalRadius = p.length();
+  const direction =
+    physicalRadius > 1e-6
+      ? p.normalize()
+      : new THREE.Vector3(1, 0, 0);
+
+  // Keep the real physics position in AU, but render the mission path
+  // inside a compact presentation envelope so Voyager remains visible.
+  const t = THREE.MathUtils.clamp(progress, 0, 1);
+  const displayRadius = 2.8 + t * 35.2;
+  return direction.multiplyScalar(displayRadius).toArray();
+}
+
 function CameraController({
   engine,
   selectedId,
@@ -1737,6 +1756,8 @@ function CameraController({
   storyMode,
   effects = [],
   enduranceFocused = false,
+  voyagerActive = false,
+  voyagerProgress = 0,
 }) {
   const { camera, size } = useThree();
   const target = useRef(new THREE.Vector3()),
@@ -1764,7 +1785,7 @@ function CameraController({
     positionVelocity.current.set(0, 0, 0);
     targetVelocity.current.set(0, 0, 0);
     previous.current.set(0, 0, 0);
-  }, [selectedId, homeToken, settings.compressed, size.width, size.height, reduced, enduranceFocused]);
+  }, [selectedId, homeToken, settings.compressed, size.width, size.height, reduced, enduranceFocused, voyagerActive, voyagerProgress]);
 
   useEffect(() => {
     if (panelOpen || storyMode)
@@ -1822,7 +1843,12 @@ function CameraController({
     }
 
     const body = engine.getBody(selectedId);
-    if (enduranceFocused) {
+    const voyager = engine.getBody("voyager-1");
+    if (voyagerActive && voyager) {
+      target.current.set(...voyagerDisplayPosition(voyager, voyagerProgress));
+      offset.current.set(4.4, 2.2, 6.2);
+      orbit.minDistance = 0.35;
+    } else if (enduranceFocused) {
       target.current.set(150, 20, -100);
       offset.current.set(8.5, 5.2, 11.5);
       orbit.minDistance = 0.5;
@@ -2292,7 +2318,7 @@ function Scene({
   return (
     <>
       <Endurance visible={enduranceVisible} onFocus={onEnduranceFocus} />
-            <SpaceBackground settings={settings} />
+            <SpaceBackground settings={settings} voyagerActive={voyagerActive} />
 
       <CinematicParticles
         quality={settings.quality}
@@ -2333,9 +2359,10 @@ function Scene({
           mission={voyagerStoryFallback}
           active
           progress={voyagerProgress}
-          position={bodyPosition(engine.getBody("voyager-1"), engine, settings.compressed)}
+          position={voyagerDisplayPosition(engine.getBody("voyager-1"), voyagerProgress)}
           selected={selectedId === "voyager-1"}
           visible
+          scale={3.6}
           onClick={(e) => { e.stopPropagation(); onSelect("voyager-1"); }}
         />
       )}
@@ -2396,6 +2423,8 @@ function Scene({
         storyMode={storyMode}
         effects={effects}
         enduranceFocused={enduranceFocused}
+        voyagerActive={voyagerActive}
+        voyagerProgress={voyagerProgress}
       />
       <ScreenCinematicFX effects={effects} settings={settings} />
 
