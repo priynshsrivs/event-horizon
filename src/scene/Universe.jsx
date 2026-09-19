@@ -829,15 +829,58 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
         >
           <planeGeometry args={[2, 2]} />
 
-          <meshBasicMaterial
-            map={blackHoleTexture}
-            transparent={false}
-            opacity={1}
-            depthWrite={false}
-            depthTest={false}
-            toneMapped={false}
-            side={THREE.DoubleSide}
-          />
+          {blackHoleTexture ? (
+            <shaderMaterial
+              transparent
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+              side={THREE.DoubleSide}
+              uniforms={{
+                map: { value: blackHoleTexture },
+              }}
+              vertexShader={`
+                varying vec2 vUv;
+
+                void main() {
+                  vUv = uv;
+                  gl_Position =
+                    projectionMatrix *
+                    modelViewMatrix *
+                    vec4(position, 1.0);
+                }
+              `}
+              fragmentShader={`
+                uniform sampler2D map;
+                varying vec2 vUv;
+
+                void main() {
+                  vec4 tex = texture2D(map, vUv);
+
+                  // NASA's movie has a black background rather than an alpha
+                  // channel. Remove only the near-black background so the
+                  // animated accretion flow sits cleanly over the simulation.
+                  float luminance =
+                    dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
+                  float alpha = smoothstep(0.008, 0.055, luminance);
+
+                  if (alpha < 0.01)
+                    discard;
+
+                  gl_FragColor = vec4(tex.rgb, alpha);
+                }
+              `}
+            />
+          ) : (
+            <meshBasicMaterial
+              color="#000000"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+            />
+          )}
         </mesh>
       </Billboard>
 
