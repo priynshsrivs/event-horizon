@@ -1861,7 +1861,7 @@ function BuildPlacement({ engine, type, settings, onPlace, onReadout }) {
   return (
     <>
       <gridHelper
-        args={[40, 40, "#2b4f5b", "#142731"]}
+        args={[600, 120, "#2b4f5b", "#142731"]}
         position={[0, -0.01, 0]}
       />
       <mesh ref={ghost}>
