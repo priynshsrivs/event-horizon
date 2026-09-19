@@ -2,13 +2,14 @@ import React, { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 
-export default function Voyager({
-  position = [0, 0, 0],
-  visible = true,
-  selected = false,
-  scale = 1,
-  onClick,
-}) {
+export default function Voyager({ mission, active = false, progress = 0, position = [0, 0, 0], visible = true, selected = false, scale = 1, onClick }) {
+  const waypointIndex = mission?.waypoints?.length
+    ? Math.min(mission.waypoints.length - 1, Math.floor(progress * mission.waypoints.length))
+    : 0;
+  const waypoint = mission?.waypoints?.[waypointIndex];
+  const distanceAU = (mission?.display?.presentDistanceAU || 165) * progress;
+  const velocityKms = active ? (mission?.display?.presentVelocityKMS || 17) : 0;
+
   const group = useRef();
   const antenna = useMemo(() => new THREE.Vector3(0, 0, 1), []);
 
@@ -21,6 +22,7 @@ export default function Voyager({
   if (!visible) return null;
 
   return (
+
     <group ref={group} position={position} scale={scale} onClick={onClick}>
       <mesh castShadow>
         <cylinderGeometry args={[0.18, 0.18, 0.035, 16]} />
@@ -54,6 +56,11 @@ export default function Voyager({
           opacity={selected ? 0.9 : 0.52}
         />
       </mesh>
+      {active && (
+        <sprite position={[0, 0.7, 0]}>
+          <spriteMaterial color="#9fe7df" transparent opacity={0.08} />
+        </sprite>
+      )}
       <lineSegments position={[0, 0.02, 0.18]}>
         <bufferGeometry>
           <bufferAttribute
@@ -65,6 +72,11 @@ export default function Voyager({
         </bufferGeometry>
         <lineBasicMaterial color="#d9e2e4" />
       </lineSegments>
+      {active && waypoint && (
+        <group position={[0, 0.62, 0]}>
+          <sprite scale={[0.001, 0.001, 0.001]} />
+        </group>
+      )}
     </group>
   );
 }
