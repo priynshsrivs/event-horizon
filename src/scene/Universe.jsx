@@ -2175,20 +2175,6 @@ function ScreenCinematicFX({ effects, settings }) {
   );
 }
 
-function Scene({
-  enduranceVisible = true,
-  onEnduranceFocus,
-  enduranceFocused = false,
-  ...sceneProps
-}) {
-  return (
-    <>
-      <Endurance visible={enduranceVisible} onFocus={onEnduranceFocus} />
-      {sceneProps.children}
-    </>
-  );
-}
-
 function SceneLegacy(props) {
   engine,
   selectedId,
