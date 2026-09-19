@@ -612,6 +612,7 @@ const NEBULA_OPTIONS = [
   { id: "orion", label: "Orion Nebula", description: "NASA Hubble composite." },
   { id: "carina", label: "Carina Nebula", description: "NASA Hubble / CTIO composite." },
   { id: "ring", label: "Ring Nebula", description: "NASA Hubble close-up." },
+  { id: "pillars", label: "Pillars of Creation", description: "NASA Webb image of the Eagle Nebula." },
 ];
 
 function NebulaPanel({ active, onSelect, onClose }) {
