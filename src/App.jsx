@@ -2172,7 +2172,6 @@ function SimulationApp() {
       if (name !== "story" && storyRef.current.active) closeStory();
       setPanel(name);
       if (name !== "voyager") setVoyagerMode(false);
-      if (name !== "story") setNebulaId((current) => current);
       if (name === "god") engine.pause();
       if (name === "story" && !storyRef.current.active) {
         storySaved.current = {
