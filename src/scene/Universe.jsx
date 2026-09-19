@@ -741,20 +741,56 @@ function EarthLayers({ radius, body, engine, settings }) {
 
 function BlackHoleVisual({ body, radius, settings, engine }) {
   const group = useRef();
+  const blackHoleVideo = useMemo(() => {
+    if (typeof document === "undefined") return null;
+
+    const video = document.createElement("video");
+    video.src = "/textures/nasa-blackhole-360.webm";
+    video.crossOrigin = "anonymous";
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    video.preload = "auto";
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+
+    return video;
+  }, []);
 
   const blackHoleTexture = useMemo(() => {
-    const loader = new THREE.TextureLoader();
+    if (!blackHoleVideo) return null;
 
-    const texture = loader.load(
-      "/textures/blackhole-nasa.png"
-    );
-
+    const texture = new THREE.VideoTexture(blackHoleVideo);
     texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;
     texture.anisotropy = 8;
     texture.needsUpdate = true;
 
     return texture;
-  }, []);
+  }, [blackHoleVideo]);
+
+  useEffect(() => {
+    if (!blackHoleVideo) return undefined;
+
+    const start = () => {
+      blackHoleVideo.play().catch(() => {});
+    };
+
+    blackHoleVideo.addEventListener("canplay", start);
+    blackHoleVideo.load();
+    start();
+
+    return () => {
+      blackHoleVideo.pause();
+      blackHoleVideo.removeEventListener("canplay", start);
+      blackHoleTexture?.dispose();
+      blackHoleVideo.removeAttribute("src");
+      blackHoleVideo.load();
+    };
+  }, [blackHoleVideo, blackHoleTexture]);
 
   /*
    * NASA black-hole visualization.
@@ -782,7 +818,7 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
   return (
     <group ref={group}>
 
-      {/* NASA black-hole visualization */}
+      {/* NASA continuous 360° black-hole visualization */}
       <Billboard>
         <mesh
           scale={[
@@ -795,7 +831,7 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
 
           <meshBasicMaterial
             map={blackHoleTexture}
-            transparent={true}
+            transparent={false}
             opacity={1}
             depthWrite={false}
             depthTest={false}
