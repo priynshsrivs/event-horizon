@@ -742,6 +742,7 @@ function EarthLayers({ radius, body, engine, settings }) {
 function BlackHoleVisual({ body, radius, settings, engine }) {
   const group = useRef();
   const [videoFailed, setVideoFailed] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
 
   const blackHoleVideo = useMemo(() => {
     if (typeof document === "undefined") return null;
@@ -798,14 +799,27 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
       start();
     };
 
+    const playing = () => {
+      if (!alive) return;
+      setVideoFailed(false);
+      setVideoPlaying(true);
+    };
+
+    const paused = () => {
+      if (!alive) return;
+      setVideoPlaying(false);
+    };
+
     const failed = () => {
       if (!alive) return;
       setVideoFailed(true);
+      setVideoPlaying(false);
     };
 
     blackHoleVideo.addEventListener("loadeddata", ready);
     blackHoleVideo.addEventListener("canplay", ready);
-    blackHoleVideo.addEventListener("playing", ready);
+    blackHoleVideo.addEventListener("playing", playing);
+    blackHoleVideo.addEventListener("pause", paused);
     blackHoleVideo.addEventListener("error", failed);
     blackHoleVideo.load();
     start();
@@ -815,7 +829,8 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
       blackHoleVideo.pause();
       blackHoleVideo.removeEventListener("loadeddata", ready);
       blackHoleVideo.removeEventListener("canplay", ready);
-      blackHoleVideo.removeEventListener("playing", ready);
+      blackHoleVideo.removeEventListener("playing", playing);
+      blackHoleVideo.removeEventListener("pause", paused);
       blackHoleVideo.removeEventListener("error", failed);
       blackHoleTexture?.dispose();
       blackHoleVideo.removeAttribute("src");
@@ -843,10 +858,18 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
     }
   });
 
-  const activeTexture =
-    !videoFailed && blackHoleTexture
-      ? blackHoleTexture
-      : fallbackTexture;
+  const videoUsable =
+    !videoFailed &&
+    videoPlaying &&
+    !!blackHoleTexture &&
+    blackHoleVideo.readyState >= 2 &&
+    blackHoleVideo.videoWidth > 0;
+
+  // Never hand the shader an unloaded VideoTexture. Until the browser is
+  // genuinely playing decoded frames, keep the proven NASA still visible.
+  const activeTexture = videoUsable
+    ? blackHoleTexture
+    : fallbackTexture;
 
   /*
    * NASA black-hole visualization.
