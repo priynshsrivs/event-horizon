@@ -1,7 +1,6 @@
 import React, { useRef } from "react";
 import { Html, Line } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
 
 function TarsPreview() {
   const ref = useRef();
