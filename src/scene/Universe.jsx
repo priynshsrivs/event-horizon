@@ -52,6 +52,12 @@ const TEXTURE_EXTENSIONS = {
 };
 
 function textureCandidates(name) {
+  if (name?.startsWith("nebula:")) {
+    const id = name.slice("nebula:".length);
+    const item = NEBULA_BACKGROUNDS.find((candidate) => candidate.id === id);
+    return item?.url ? [item.url] : [];
+  }
+
   const extensions =
     TEXTURE_EXTENSIONS[name] || ["jpg", "jpeg", "png", "webp"];
 
@@ -300,7 +306,70 @@ function CinematicDust({ settings, reduced }) {
   );
 }
 
-function SpaceBackground({ settings, voyagerActive = false }) {
+const NEBULA_BACKGROUNDS = [
+  {
+    id: "orion",
+    name: "Orion Nebula",
+    url: "https://science.nasa.gov/wp-content/uploads/2023/06/orion-nebula.jpg",
+    position: 0.34,
+    scale: 1.0,
+    opacity: 0.30,
+  },
+  {
+    id: "carina",
+    name: "Carina Nebula",
+    url: "https://science.nasa.gov/wp-content/uploads/2023/06/carina-nebula.jpg",
+    position: 0.64,
+    scale: 1.08,
+    opacity: 0.24,
+  },
+  {
+    id: "ring",
+    name: "Ring Nebula",
+    url: "https://science.nasa.gov/wp-content/uploads/2024/02/ring-nebula.jpg",
+    position: 0.82,
+    scale: 0.9,
+    opacity: 0.22,
+  },
+];
+
+function NebulaBackground({ id = null }) {
+  const config = NEBULA_BACKGROUNDS.find((item) => item.id === id);
+  const texture = useSafeTexture(
+    config?.id ? `nebula:${config.id}` : null,
+  );
+  const { scene } = useThree();
+  const group = useRef();
+
+  useEffect(() => {
+    if (!config || !texture || !group.current) return;
+    const material = group.current.material;
+    material.map = texture;
+    material.needsUpdate = true;
+  }, [config, texture]);
+
+  if (!config) return null;
+
+  return (
+    <mesh
+      ref={group}
+      position={[0, 0, -1800]}
+      renderOrder={-100}
+      frustumCulled={false}
+    >
+      <planeGeometry args={[3200, 1900]} />
+      <meshBasicMaterial
+        transparent
+        opacity={config.opacity}
+        depthWrite={false}
+        depthTest={false}
+        toneMapped={false}
+      />
+    </mesh>
+  );
+}
+
+function SpaceBackground({ settings, voyagerActive = false, nebulaId = null }) {
   const galaxy = useSafeTexture("galaxy");
   const { scene, camera } = useThree();
   const reduced = usePrefersReducedMotion();
@@ -314,6 +383,8 @@ function SpaceBackground({ settings, voyagerActive = false }) {
       scene.background = null;
     };
   }, [scene]);
+
+  const nebulaTexture = useSafeTexture(nebulaId ? `nebula:${nebulaId}` : null);
 
   useFrame(() => {
     const distance = camera.position.length();
@@ -381,6 +452,19 @@ function SpaceBackground({ settings, voyagerActive = false }) {
 
   return (
     <group>
+      {nebulaTexture && (
+        <mesh position={[0, 0, -900]} renderOrder={-100} frustumCulled={false}>
+          <planeGeometry args={[3000, 1800]} />
+          <meshBasicMaterial
+            map={nebulaTexture}
+            transparent
+            opacity={nebulaId ? 0.26 : 0}
+            depthWrite={false}
+            depthTest={false}
+            toneMapped={false}
+          />
+        </mesh>
+      )}
       <AnimatedStarLayer
         count={Math.floor(density * 0.5)}
         radius={245}
@@ -1825,6 +1909,7 @@ function CameraController({
   enduranceFocused = false,
   voyagerActive = false,
   voyagerProgress = 0,
+  nebulaId = null,
 }) {
   const { camera, size } = useThree();
   const target = useRef(new THREE.Vector3()),
@@ -2394,7 +2479,7 @@ function Scene({
   return (
     <>
       <Endurance visible={enduranceVisible} onFocus={onEnduranceFocus} />
-            <SpaceBackground settings={settings} voyagerActive={voyagerActive} />
+            <SpaceBackground settings={settings} voyagerActive={voyagerActive} nebulaId={nebulaId} />
 
       <CinematicParticles
         quality={settings.quality}
