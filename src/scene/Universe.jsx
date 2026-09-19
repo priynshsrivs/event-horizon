@@ -33,6 +33,7 @@ import {
 const textureCache = new Map();
 const textureRequests = new Map();
 const loader = new THREE.TextureLoader();
+loader.setCrossOrigin("anonymous");
 const voyagerStoryFallback = {
   waypoints: [
     { year: 1977, label: "Earth Launch & Orbital Insertion" },
@@ -125,7 +126,7 @@ function loadTexture(name) {
               loader.load(url, resolve, undefined, reject);
             });
             loaded.colorSpace = THREE.SRGBColorSpace;
-            loaded.flipY = true;
+            loaded.flipY = !name?.startsWith("nebula:");
             loaded.wrapS = THREE.ClampToEdgeWrapping;
             loaded.wrapT = THREE.ClampToEdgeWrapping;
             loaded.anisotropy = 4;
@@ -310,28 +311,28 @@ const NEBULA_BACKGROUNDS = [
   {
     id: "orion",
     name: "Orion Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2023/09/hubble-nebula-orion.jpg",
+    url: "https://science.nasa.gov/wp-content/uploads/2023/04/hubble-nebula-orion-nebula-display-jpg.webp",
     opacity: 0.34,
     rotation: [0.15, -0.35, 0],
   },
   {
     id: "carina",
     name: "Carina Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2023/09/carina-nebula.jpg",
+    url: "https://science.nasa.gov/wp-content/uploads/2023/04/c92-1-jpg.webp",
     opacity: 0.27,
     rotation: [-0.10, 0.55, 0],
   },
   {
     id: "pillars",
     name: "Pillars of Creation",
-    url: "https://science.nasa.gov/wp-content/uploads/2022/10/STScI-01GA76K4QFQ6R3YQKQWJZJ2Q2T.png",
+    url: "https://assets.science.nasa.gov/dynamicimage/assets/science/missions/webb/outreach/migrated/2022/STScI-01GK2KMYS6HADS6ND8NRHG53RP.png?crop=faces%2Cfocalpoint&fit=clip&h=6675&w=7130",
     opacity: 0.20,
     rotation: [0.08, 0.18, 0],
   },
   {
     id: "ring",
     name: "Ring Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2024/02/ring-nebula.jpg",
+    url: "https://science.nasa.gov/wp-content/uploads/2023/07/ring-nebula.jpg",
     opacity: 0.24,
     rotation: [0, -0.50, 0.08],
   },
@@ -376,7 +377,13 @@ function SpaceBackground({ settings, voyagerActive = false, nebulaId = null }) {
           : 0.68;
     const galaxyModeMultiplier = voyagerActive ? 0.04 : 1;
 
-    if (galaxy) {
+    if (nebulaTexture) {
+      if (scene.background !== nebulaTexture) {
+        scene.background = nebulaTexture;
+      }
+      scene.backgroundIntensity = 0.62;
+      scene.backgroundBlurriness = 0;
+    } else if (galaxy) {
       if (scene.background !== galaxy) {
         scene.background = galaxy;
       }
@@ -420,29 +427,6 @@ function SpaceBackground({ settings, voyagerActive = false, nebulaId = null }) {
 
   return (
     <group>
-      {nebulaTexture && (() => {
-        const config = NEBULA_BACKGROUNDS.find((item) => item.id === nebulaId);
-        return (
-          <mesh
-            position={[0, 0, 0]}
-            rotation={config?.rotation || [0, 0, 0]}
-            renderOrder={-100}
-            frustumCulled={false}
-            scale={950}
-          >
-            <sphereGeometry args={[1, 64, 32]} />
-            <meshBasicMaterial
-              map={nebulaTexture}
-              side={THREE.BackSide}
-              transparent
-              opacity={config?.opacity ?? 0.22}
-              depthWrite={false}
-              depthTest={false}
-              toneMapped={false}
-            />
-          </mesh>
-        );
-      })()}
       <AnimatedStarLayer
         count={Math.floor(density * 0.5)}
         radius={245}
