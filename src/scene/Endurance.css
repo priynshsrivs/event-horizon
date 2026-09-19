@@ -37,3 +37,11 @@
 .voyager-hud strong { display:block; font: 14px "IBM Plex Mono", monospace; }
 .voyager-hud span { color: rgba(232,247,245,.55); font-size: 9px; letter-spacing:.08em; }
 .voyager-stage { margin-top: 10px; font-size: 10px; color: rgba(232,247,245,.7); }
+
+.tars-css { width: 52px; height: 118px; position: relative; transform: perspective(180px) rotateY(-18deg) rotateX(3deg); animation: tars-float 2.8s ease-in-out infinite; }
+.tars-css::before { content:""; position:absolute; inset:0; border:1px solid rgba(214,224,227,.6); border-radius:5px; background:linear-gradient(90deg,#3f474d,#a5adb1 38%,#4e575e 100%); box-shadow: inset 0 0 0 4px rgba(30,38,43,.55), 0 12px 28px rgba(0,0,0,.35); }
+.tars-css i { position:absolute; left:11px; right:11px; top:16px; height:6px; background:#20282e; border:1px solid rgba(194,219,217,.35); z-index:2; }
+.tars-css b { position:absolute; left:20px; right:20px; bottom:13px; height:28px; border:1px solid rgba(218,226,228,.35); background:rgba(24,31,36,.38); z-index:2; }
+.tars-css span { position:absolute; width:3px; height:3px; top:19px; left:16px; background:#a8eee5; box-shadow:18px 0 #a8eee5; z-index:3; animation:tars-blink 3.2s steps(1,end) infinite; }
+@keyframes tars-float { 0%,100%{transform:perspective(180px) rotateY(-18deg) rotateX(3deg) translateY(0)} 50%{transform:perspective(180px) rotateY(18deg) rotateX(-3deg) translateY(-7px)} }
+@keyframes tars-blink { 0%,94%,100%{opacity:1} 95%,99%{opacity:.2} }
