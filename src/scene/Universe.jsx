@@ -458,7 +458,7 @@ function SpaceBackground({ settings, voyagerActive = false, nebulaId = null }) {
           <meshBasicMaterial
             map={nebulaTexture}
             transparent
-            opacity={nebulaId ? 0.26 : 0}
+            opacity={nebulaId ? 0.20 : 0}
             depthWrite={false}
             depthTest={false}
             toneMapped={false}
