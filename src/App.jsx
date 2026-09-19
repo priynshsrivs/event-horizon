@@ -615,11 +615,7 @@ function VoyagerPanel({ story, engine, progress, setProgress, active, setActive,
       <p className="panel-intro">{story.description}</p>
       <section className="panel-section">
         <button className="button warm full" onClick={() => {
-          const body = engine.getBody("voyager-1") || engine.spawnBody("asteroid", {
-            id: "voyager-1", name: "Voyager 1", mass: 1e-10, radius: 1e-9,
-            collisionMode: "ignore",
-            metadata: { visualSize: 0.2, color: "#b8d9d6", voyagerMission: true }
-          });
+          const body = ensureVoyagerBody(progress);
           onSelect(body.id);
           setActive(!active);
         }}>{active ? "Pause mission" : "Start mission"}</button>
