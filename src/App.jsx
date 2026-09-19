@@ -605,19 +605,33 @@ function BodyEditor({ body, engine, onChange, notify }) {
   );
 }
 
+function voyagerWaypointIndex(waypoints, missionYear) {
+  if (!waypoints?.length) return 0;
+  let index = 0;
+  for (let i = 0; i < waypoints.length; i++) {
+    if (missionYear >= waypoints[i].year) index = i;
+  }
+  return index;
+}
+
 function VoyagerPanel({ story, engine, progress, setProgress, active, setActive, onSelect, deepTimeTarget, setDeepTimeTarget, act, ensureVoyagerBody }) {
-  const idx = Math.min(story.waypoints.length - 1, Math.floor(progress * story.waypoints.length));
-  const waypoint = story.waypoints[idx];
   const missionYear = 1977 + (2012 - 1977) * progress;
+  const idx = voyagerWaypointIndex(story.waypoints, missionYear);
+  const waypoint = story.waypoints[idx];
   return (
     <aside className="panel voyager-panel">
-      <PanelHeading eyebrow="MISSION STORY" title="Voyager's Journey" icon="story" onClose={() => setActive(false)} />
+      <PanelHeading eyebrow="MISSION STORY" title="Voyager's Journey" icon="story" onClose={() => { setActive(false); onSelect(null); }} />
       <p className="panel-intro">{story.description}</p>
       <section className="panel-section">
         <button className="button warm full" onClick={() => {
+          if (active) {
+            setActive(false);
+            onSelect(null);
+            return;
+          }
           const body = ensureVoyagerBody(progress);
           onSelect(body.id);
-          setActive(!active);
+          setActive(true);
         }}>{active ? "Pause mission" : "Start mission"}</button>
         <label className="range-label">MISSION YEAR <output>{Math.round(missionYear)}</output>
           <input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => {
@@ -2533,7 +2547,7 @@ function SimulationApp() {
       )}
       {voyagerMode && <div className="voyager-hud">
         <div className="eyebrow">VOYAGER 1 · MISSION HUD</div>
-        <div className="mission-title">{voyagerStory["voyager-1-journey"].waypoints[Math.min(3, Math.floor(voyagerProgress * 4))].label}</div>
+        <div className="mission-title">{voyagerStory["voyager-1-journey"].waypoints[voyagerWaypointIndex(voyagerStory["voyager-1-journey"].waypoints, 1977 + (2012 - 1977) * voyagerProgress)].label}</div>
         <div className="hud-grid">
           <div><strong>{(1977 + (2012 - 1977) * voyagerProgress).toFixed(0)}</strong><span>MISSION YEAR</span></div>
           <div><strong>17.0</strong><span>KM/S</span></div>
