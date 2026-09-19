@@ -1580,11 +1580,13 @@ function CameraController({
     right = useMemo(() => new THREE.Vector3(), []),
     up = useMemo(() => new THREE.Vector3(), []),
     boundOrbit = useRef(null),
+    userZoomed = useRef(false),
     lastUserAction = useRef(performance.now());
   const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
     moving.current = true;
+    userZoomed.current = false;
     focused.current = selectedId;
     focusPulse.current = reduced ? 0 : 1;
     positionVelocity.current.set(0, 0, 0);
@@ -1610,6 +1612,22 @@ function CameraController({
     camera.updateProjectionMatrix();
     return () => camera.clearViewOffset();
   }, [camera, panelOpen, storyMode, size.width, size.height]);
+
+  useEffect(() => {
+    const orbit = controls.current;
+    if (!orbit?.domElement) return undefined;
+
+    const onWheel = () => {
+      userZoomed.current = true;
+      moving.current = false;
+      positionVelocity.current.set(0, 0, 0);
+      targetVelocity.current.set(0, 0, 0);
+      lastUserAction.current = performance.now();
+    };
+
+    orbit.domElement.addEventListener("wheel", onWheel, { passive: true });
+    return () => orbit.domElement.removeEventListener("wheel", onWheel);
+  }, []);
 
   useFrame((state, dt) => {
     const orbit = controls.current;
@@ -1673,10 +1691,19 @@ function CameraController({
       const approach = 1 + focusPulse.current * 0.08;
       desired.current.copy(target.current).addScaledVector(offset.current, approach);
 
-      temp.copy(desired.current).sub(camera.position);
-      positionVelocity.current.addScaledVector(temp, stiffness * dt);
-      positionVelocity.current.multiplyScalar(Math.exp(-damping * dt));
-      camera.position.addScaledVector(positionVelocity.current, dt);
+      /*
+       * Camera placement is only used for explicit focus/home transitions.
+       * Once the user has taken control of OrbitControls (including zooming),
+       * never pull the camera back toward the old focused distance.
+       */
+      if (!userZoomed.current) {
+        temp.copy(desired.current).sub(camera.position);
+        positionVelocity.current.addScaledVector(temp, stiffness * dt);
+        positionVelocity.current.multiplyScalar(Math.exp(-damping * dt));
+        camera.position.addScaledVector(positionVelocity.current, dt);
+      } else {
+        positionVelocity.current.set(0, 0, 0);
+      }
 
       temp.copy(target.current).sub(orbit.target);
       targetVelocity.current.addScaledVector(temp, stiffness * dt);
@@ -1684,8 +1711,10 @@ function CameraController({
       orbit.target.addScaledVector(targetVelocity.current, dt);
 
       if (
-        camera.position.distanceTo(desired.current) < 0.012 &&
-        positionVelocity.current.lengthSq() < 0.00004
+        (!userZoomed.current &&
+          camera.position.distanceTo(desired.current) < 0.012 &&
+          positionVelocity.current.lengthSq() < 0.00004) ||
+        userZoomed.current
       ) {
         moving.current = false;
         positionVelocity.current.set(0, 0, 0);
