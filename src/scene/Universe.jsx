@@ -1728,22 +1728,47 @@ function Effect({ effect, engine, compressed, settings }) {
   );
 }
 
-function voyagerDisplayPosition(body, progress = 0) {
-  if (!body) return [0, 0, 0];
+const VOYAGER_DISPLAY_WAYPOINTS = [
+  [4.6, 0.3, 0.0],   // 1977 · Earth launch
+  [9.6, 0.8, -0.6],  // 1979 · Jupiter
+  [14.8, 1.2, -1.5], // 1980 · Saturn
+  [31.0, 2.6, -5.8], // 2012 · interstellar space
+];
 
-  const p = body.position.clone();
-  const physicalRadius = p.length();
-  const direction =
-    physicalRadius > 1e-6
-      ? p.normalize()
-      : new THREE.Vector3(1, 0, 0);
+function sampleVoyagerDisplayPosition(progress = 0) {
+  const p = THREE.MathUtils.clamp(progress, 0, 1);
+  const scaled = p * (VOYAGER_DISPLAY_WAYPOINTS.length - 1);
+  const index = Math.min(
+    VOYAGER_DISPLAY_WAYPOINTS.length - 2,
+    Math.floor(scaled),
+  );
+  const local = THREE.MathUtils.smoothstep(scaled - index, 0, 1);
+  const a = VOYAGER_DISPLAY_WAYPOINTS[index];
+  const b = VOYAGER_DISPLAY_WAYPOINTS[index + 1];
 
-  // Keep the real physics position in AU, but render the mission path
-  // inside a compact presentation envelope so Voyager remains visible.
-  const t = THREE.MathUtils.clamp(progress, 0, 1);
-  const displayRadius = 2.8 + t * 35.2;
-  return direction.multiplyScalar(displayRadius).toArray();
+  return a.map((v, i) => THREE.MathUtils.lerp(v, b[i], local));
 }
+
+function voyagerDisplayPosition(_body, progress = 0) {
+  return sampleVoyagerDisplayPosition(progress);
+}
+
+function voyagerProgressTangent(progress = 0) {
+  const a = sampleVoyagerDisplayPosition(Math.max(0, progress - 0.002));
+  const b = sampleVoyagerDisplayPosition(Math.min(1, progress + 0.002));
+  return new THREE.Vector3(...b).sub(new THREE.Vector3(...a)).normalize();
+}
+
+function voyagerCameraOffset(progress = 0) {
+  const tangent = voyagerProgressTangent(progress);
+  // Trail the spacecraft slightly while keeping a readable elevated angle.
+  return new THREE.Vector3(
+    -tangent.x * 2.2 + 2.4,
+    2.1 + Math.sin(progress * Math.PI) * 0.6,
+    -tangent.z * 2.2 + 5.4,
+  );
+}
+
 
 function CameraController({
   engine,
@@ -1845,8 +1870,8 @@ function CameraController({
     const body = engine.getBody(selectedId);
     const voyager = engine.getBody("voyager-1");
     if (voyagerActive && voyager) {
-      target.current.set(...voyagerDisplayPosition(voyager, voyagerProgress));
-      offset.current.set(4.4, 2.2, 6.2);
+      target.current.set(...sampleVoyagerDisplayPosition(voyagerProgress));
+      offset.current.copy(voyagerCameraOffset(voyagerProgress));
       orbit.minDistance = 0.35;
     } else if (enduranceFocused) {
       target.current.set(150, 20, -100);
@@ -1924,7 +1949,7 @@ function CameraController({
       }
     }
 
-    orbit.enabled = !building;
+    orbit.enabled = !building && !(voyagerActive && moving.current);
     orbit.update();
 
     const idle =
@@ -2359,10 +2384,10 @@ function Scene({
           mission={voyagerStoryFallback}
           active
           progress={voyagerProgress}
-          position={voyagerDisplayPosition(engine.getBody("voyager-1"), voyagerProgress)}
+          position={sampleVoyagerDisplayPosition(voyagerProgress)}
           selected={selectedId === "voyager-1"}
           visible
-          scale={3.6}
+          scale={1}
           onClick={(e) => { e.stopPropagation(); onSelect("voyager-1"); }}
         />
       )}
