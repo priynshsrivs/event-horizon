@@ -2280,6 +2280,7 @@ function Scene({
     }
   }, -2);
   const bodies = engine.getBodies();
+  const voyagerBody = engine.getBody("voyager-1");
   return (
     <>
       <Endurance visible={enduranceVisible} onFocus={onEnduranceFocus} />
@@ -2386,6 +2387,7 @@ function Scene({
         panelOpen={panelOpen}
         storyMode={storyMode}
         effects={effects}
+        enduranceFocused={enduranceFocused}
       />
       <ScreenCinematicFX effects={effects} settings={settings} />
 
