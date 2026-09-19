@@ -1,6 +1,6 @@
 import { Vector3, G, TAU, EARTH_RADIUS_M, AU_M } from "./PhysicsEngine.js";
 
-export const CHAPTERS = [
+const ALL_CHAPTERS = [
   {
     title: "Before the first light",
     era: "01 · SINGULARITY",
@@ -184,3 +184,11 @@ export function initializeChapter(engine, index) {
   engine.emit("simulationReset");
   return index === 0 ? "origin" : index === 5 ? "proto-earth" : null;
 }
+
+
+/*
+ * Public guided story begins with the Solar Nebula chapter.
+ * The earlier cosmology illustrations remain private to the physics module
+ * and are no longer exposed by the Story UI.
+ */
+export const CHAPTERS = ALL_CHAPTERS.slice(3);
