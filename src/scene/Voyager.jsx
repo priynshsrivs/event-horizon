@@ -12,7 +12,7 @@ import * as THREE from "three";
  * actual spacecraft appearance rather than a hand-built low-poly mesh.
  */
 const NASA_VOYAGER_IMAGE =
-  "https://d2pn8kiwq2w21t.cloudfront.net/original_images/jpegPIA14111.jpg";
+  "https://assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/pia26/pia26353/PIA26353.jpg";
 
 const fragmentShader = `
 uniform sampler2D map;
@@ -21,19 +21,22 @@ varying vec2 vUv;
 void main() {
   vec4 tex = texture2D(map, vUv);
 
-  // The NASA render has a black studio background. Key only the near-black
-  // pixels so the spacecraft remains readable over the observatory scene.
+  // PIA26353 is a NASA/JPL artist concept with a dark space background.
+  // Remove the dark background while retaining the illuminated spacecraft.
   float luminance = dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
-  float alpha = smoothstep(0.004, 0.035, luminance);
+  float alpha = smoothstep(0.025, 0.115, luminance);
 
-  // Keep a little of the original lighting while preventing the image from
-  // becoming overexposed beside bright stars and the Sun.
-  vec3 color = pow(max(tex.rgb, vec3(0.0)), vec3(0.94));
+  // Stars and dust in the artwork stay extremely faint rather than forming
+  // an opaque rectangle around the spacecraft.
+  alpha *= smoothstep(0.035, 0.18, luminance);
 
   if (alpha < 0.012) discard;
-  gl_FragColor = vec4(color, alpha * 0.96);
+
+  vec3 color = pow(max(tex.rgb, vec3(0.0)), vec3(0.94));
+  gl_FragColor = vec4(color, alpha * 0.92);
 }
 `;
+
 
 const vertexShader = `
 varying vec2 vUv;
@@ -108,7 +111,7 @@ export default function Voyager({
     >
       <Billboard>
         <mesh>
-          <planeGeometry args={[1.72, 1.29]} />
+          <planeGeometry args={[1.68, 0.945]} />
           {texture ? (
             <shaderMaterial
               uniforms={{ map: { value: texture } }}
@@ -131,11 +134,11 @@ export default function Voyager({
         </mesh>
 
         <mesh position={[0, -0.015, 0.01]}>
-          <ringGeometry args={[0.73, 0.745, 64]} />
+          <ringGeometry args={[0.50, 0.512, 64]} />
           <meshBasicMaterial
             color={selected ? "#b9f5ed" : "#86bfc0"}
             transparent
-            opacity={selected ? 0.9 : active ? 0.34 : 0.18}
+            opacity={selected ? 0.75 : active ? 0.18 : 0.10}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
           />
