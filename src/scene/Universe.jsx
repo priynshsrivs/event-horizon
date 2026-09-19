@@ -23,6 +23,7 @@ import {
   mapPosition,
   unmapPosition,
   bodyPosition,
+  compressedVisualRadius,
   visualRadius,
 } from "./coordinates.js";
 
@@ -1317,7 +1318,7 @@ function HabitableZone({ engine, compressed }) {
     <>
       {stars.slice(0, 5).map((star) => {
         const zone = engine.calculateHabitableZone(star),
-          factor = (r) => (compressed ? 4 * Math.log1p(r) : r);
+          factor = (r) => (compressed ? compressedVisualRadius(r) : r);
         return (
           <group
             key={star.id}
