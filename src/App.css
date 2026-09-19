@@ -10811,3 +10811,11 @@ audio[src="/audio/interstellar.mp3"] {
 .solar-system-reference {
   opacity: var(--eh-solar-bg-opacity, 0.48) !important;
 }
+
+.future-timeline { border-top: 1px solid #ffffff18; padding: 8px 12px; font-size: 11px; color: #bdd1d7; }
+.future-timeline summary { cursor: pointer; line-height: 1.6; }
+.future-inputs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+.future-inputs input { width: 100px; }
+.future-inputs input, .future-inputs select { color: #dcebed; background: #111b22; border: 1px solid #ffffff30; border-radius: 5px; padding: 7px; }
+.future-timeline .fine-print { max-width: 680px; line-height: 1.5; }
+@media (max-width: 600px) { .future-timeline { max-height: 220px; overflow-y: auto; } .future-inputs .button { min-height: 36px; } }

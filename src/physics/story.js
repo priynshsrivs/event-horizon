@@ -60,8 +60,8 @@ const ALL_CHAPTERS = [
 ];
 
 const validateChapterIndex = (index) => {
-  if (!Number.isInteger(index) || index < 0 || index >= CHAPTERS.length) {
-    throw new RangeError(`Story chapter index must be an integer from 0 to ${CHAPTERS.length - 1}.`);
+  if (!Number.isInteger(index) || index < 0 || index >= ALL_CHAPTERS.length) {
+    throw new RangeError(`Story chapter index must be an integer from 0 to ${ALL_CHAPTERS.length - 1}.`);
   }
   return index;
 };

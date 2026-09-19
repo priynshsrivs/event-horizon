@@ -10,7 +10,11 @@
         "label": "Earth Launch & Orbital Insertion",
         "date": "1977-09-05",
         "phase": "launch",
-        "cameraOffset": [0.7, 0.35, 1.2],
+        "cameraOffset": [
+          0.7,
+          0.35,
+          1.2
+        ],
         "speedMultiplier": 1
       },
       {
@@ -18,7 +22,11 @@
         "label": "Jupiter Flyby",
         "date": "1979-03-05",
         "phase": "jupiter-flyby",
-        "cameraOffset": [1.7, 0.8, 2.6],
+        "cameraOffset": [
+          1.7,
+          0.8,
+          2.6
+        ],
         "speedMultiplier": 1.8,
         "highlight": "Gravitational slingshot increased Voyager 1's heliocentric energy and bent its trajectory toward Saturn."
       },
@@ -27,24 +35,56 @@
         "label": "Saturn Flyby & Titan Diversion",
         "date": "1980-11-12",
         "phase": "saturn-flyby",
-        "cameraOffset": [1.9, 0.8, 3.1],
+        "cameraOffset": [
+          1.9,
+          0.8,
+          3.1
+        ],
         "speedMultiplier": 1.55,
         "highlight": "The Saturn encounter and Titan targeting shaped Voyager 1's post-encounter departure trajectory."
+      },
+      {
+        "year": 1990,
+        "date": "1990-02-14",
+        "label": "Pale Blue Dot",
+        "phase": "portrait",
+        "highlight": "Looking back at Earth from roughly 40 AU: a pale blue dot in a sunbeam."
       },
       {
         "year": 2012,
         "label": "Heliopause / Interstellar Space",
         "date": "2012-08-25",
         "phase": "interstellar",
-        "cameraOffset": [3.4, 1.4, 5.5],
+        "cameraOffset": [
+          3.4,
+          1.4,
+          5.5
+        ],
         "speedMultiplier": 0.95,
         "highlight": "Voyager 1 crossed into interstellar space in August 2012."
+      },
+      {
+        "year": 2026,
+        "date": "2026-09-19",
+        "label": "Present-day position \u00b7 estimate",
+        "phase": "present",
+        "highlight": "Far beyond the planets, travelling north of the ecliptic. Position is illustrative, not a live ephemeris."
+      },
+      {
+        "year": 2046,
+        "date": "2046-09-19",
+        "label": "Continuing outward",
+        "phase": "future",
+        "highlight": "Voyager continues coasting outward even after its instruments and radio fall silent."
       }
     ],
     "display": {
-      "initialDistanceAU": 0,
-      "presentDistanceAU": 165,
-      "presentVelocityKMS": 17.0
+      "sourceURL": "https://science.nasa.gov/mission/voyager/voyager-1/",
+      "epoch": "2024-08-21T00:00:00Z",
+      "baselineDistanceAU": 164.7,
+      "distanceReference": "Earth",
+      "outboundVelocityKMS": 17,
+      "uncertainty": "Approximate; ignores Earth\u2019s orbital motion (up to about 2 AU change from baseline) and velocity changes."
     }
   }
 }

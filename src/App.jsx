@@ -8,11 +8,15 @@ import PhysicsEngine, {
   isStar,
 } from "./physics/PhysicsEngine.js";
 import { CHAPTERS, initializeChapter } from "./physics/story.js";
-import voyagerStory from "./data/stories.json";
+import voyagerStoryData from "./data/stories.json";
+const voyagerStory = { "voyager-1-journey": presentMission(voyagerStoryData["voyager-1-journey"]) };
 import Universe from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
-import { playTone } from "./ui/audio.js";
+import { playTone, getMuted, setMuted, subscribeAudio, mountAudio, setAudioVolume } from "./ui/audio.js";
+import FutureTimeline from "./ui/FutureTimeline.jsx";
+import VoyagerMissionPanel from "./ui/VoyagerMissionPanel.jsx";
+import { presentMission, missionYearAt, estimateVoyagerDistance, missionPlaybackProgress } from "./physics/voyager.js";
 import "./scene/Endurance.css";
 
 const DEFAULT_SETTINGS = {
@@ -647,56 +651,6 @@ function voyagerWaypointIndex(waypoints, missionYear) {
   return index;
 }
 
-function VoyagerPanel({ story, engine, progress, setProgress, active, setActive, onSelect, deepTimeTarget, setDeepTimeTarget, act, ensureVoyagerBody }) {
-  const missionYear = 1977 + (2012 - 1977) * progress;
-  const idx = voyagerWaypointIndex(story.waypoints, missionYear);
-  const waypoint = story.waypoints[idx];
-  return (
-    <aside className="panel voyager-panel">
-      <PanelHeading eyebrow="MISSION STORY" title="Voyager's Journey" icon="story" onClose={() => { setActive(false); onSelect(null); }} />
-      <p className="panel-intro">{story.description}</p>
-      <section className="panel-section">
-        <button className="button warm full" onClick={() => {
-          if (active) {
-            setActive(false);
-            onSelect(null);
-            return;
-          }
-          const body = ensureVoyagerBody(progress);
-          onSelect(body.id);
-          setActive(true);
-        }}>{active ? "Pause mission" : "Start mission"}</button>
-        <label className="range-label">MISSION YEAR <output>{Math.round(missionYear)}</output>
-          <input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => {
-            const value = +e.target.value;
-            setActive(false);
-            setProgress(value);
-            ensureVoyagerBody(value);
-            onSelect("voyager-1");
-          }} />
-        </label>
-      </section>
-      <section className="panel-section">
-        <h3>{waypoint.label}</h3>
-        <dl className="data-rows">
-          <Metric label="Mission elapsed" value={fmt(missionYear - 1977, 1)} unit="yr" />
-          <Metric label="Velocity" value="17.0" unit="km/s" />
-          <Metric label="Distance from Earth" value={fmt(165 * progress, 1)} unit="AU" />
-        </dl>
-      </section>
-      <section className="panel-section">
-        <h3>Deep time · stellar evolution</h3>
-        <label className="range-label"><output>{(deepTimeTarget / 1e9).toFixed(2)} Gyr</output>
-          <input type="range" min="0" max="5000000000" step="10000000" value={deepTimeTarget}
-            onChange={(e) => { const v = +e.target.value; setDeepTimeTarget(v); act(() => engine.applyDeepTime(v)); }} />
-        </label>
-        <button className="button full" onClick={() => act(() => { engine.fastForwardDeepTime(5e9); setDeepTimeTarget(5e9); })}>
-          Fast-forward to +5 Gyr
-        </button>
-      </section>
-    </aside>
-  );
-}
 
 function GodPanel({
   engine,
@@ -853,6 +807,7 @@ function GodPanel({
                     : engine.bodies.find(isStar);
                 if (!star) throw new Error("Create or select a star first.");
                 const remnant = engine.triggerSupernova(star.id);
+                if (!remnant) throw new Error(engine.supernovaEligibility(star.id).reason);
                 onSelect(remnant.id);
               })
             }
@@ -862,8 +817,7 @@ function GodPanel({
           </button>
         </div>
         <p className="fine-print">
-          Forced supernovae are sandbox interventions. The Sun cannot naturally
-          undergo a core-collapse supernova.
+          Core-collapse requires an initial mass of at least 8 Suns. The Sun leaves a white dwarf after shedding its outer layers.
         </p>
       </section>
       {selected && (
@@ -1041,7 +995,7 @@ function PhysicsPanel({
         <h3>Field visualizations</h3>
         {[
           ["habitable", "Habitable zones"],
-          ["lensing", "Background lensing"],
+          ["lensing", "Background lensing (medium/high)"],
           ["frameDragging", "Accretion disk rotation"],
           ["darkMatter", "Dark matter fields"],
           ["links", "Wormhole links"],
@@ -1055,7 +1009,7 @@ function PhysicsPanel({
         ))}
       </section>
       <p className="fine-print">
-        Newtonian gravity is simulated. Relativity, lensing, stellar evolution
+        Lensing bends background light with a visually enlarged thin-lens approximation (alpha ~ 4GM/bc^2), not full relativistic ray tracing. Low quality disables it. Newtonian gravity is simulated. Relativity, stellar evolution
         and tidal fragmentation are reduced approximations, not full GR or fluid
         dynamics.
       </p>
@@ -1976,7 +1930,10 @@ function SimulationApp() {
   });
   const [selectedId, setSelectedId] = useState(null),
     [panel, setPanel] = useState(null),
-    [settings, setSettings] = useState(DEFAULT_SETTINGS);
+    [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, sound: !getMuted() }));
+  useEffect(() => mountAudio(), []);
+  useEffect(() => subscribeAudio(muted => setSettings(old => ({ ...old, sound: !muted }))), []);
+  useEffect(() => setAudioVolume(settings.volume), [settings.volume]);
   const [homeToken, setHomeToken] = useState(0),
     [sceneRevision, setSceneRevision] = useState(0),
     [, refresh] = useState(0);
@@ -2003,6 +1960,7 @@ function SimulationApp() {
   const [chapter, setChapter] = useState(0),
     [storyProgress, setStoryProgress] = useState(0),
     [voyagerMode, setVoyagerMode] = useState(false),
+    [voyagerPlaying, setVoyagerPlaying] = useState(false),
     [voyagerProgress, setVoyagerProgress] = useState(0),
     [nebulaId, setNebulaId] = useState(null),
     [enduranceVisible, setEnduranceVisible] = useState(true),
@@ -2031,8 +1989,10 @@ function SimulationApp() {
       { id: ++nextId.current, message, kind, at: Date.now() },
     ]);
   }, []);
-  const setSetting = (key, value) =>
+  const setSetting = (key, value) => {
+    if (key === "sound") setMuted(!value);
     setSettings((old) => ({ ...old, [key]: value }));
+  };
   const select = useCallback((id) => {
     setSelectedId(id);
     if (settingsRef.current.sound)
@@ -2047,7 +2007,10 @@ function SimulationApp() {
     [0, 0, 0],
     [5.2, 0, 0.15],
     [9.55, 0, -0.18],
-    [165, 0, -1.2],
+    [40, 3, -0.5],
+    [121, 8, -1],
+    [170, 10, -1.2],
+    [240, 15, -1.8],
   ];
   const interpolateVoyager = useCallback((progress) => {
     const clamped = Math.max(0, Math.min(1, progress));
@@ -2085,15 +2048,20 @@ function SimulationApp() {
   }, [voyagerProgress]);
 
   useEffect(() => {
-    if (!voyagerMode) return undefined;
+    if (!voyagerMode || !voyagerPlaying) return undefined;
+    engine.pause();
 
+    if (voyagerPlaybackRef.current.progress >= 1) {
+      voyagerPlaybackRef.current.progress = 0;
+      setVoyagerProgress(0);
+    }
     const startedAt = performance.now();
     const startProgress = voyagerPlaybackRef.current.progress;
     const durationMs = Math.max(18000, (1 - startProgress) * 32000);
     let raf = 0;
 
     const tick = (now) => {
-      const next = Math.min(1, startProgress + (now - startedAt) / durationMs);
+      const next = missionPlaybackProgress(startProgress, now - startedAt, durationMs);
       voyagerPlaybackRef.current.progress = next;
       ensureVoyagerBody(next);
 
@@ -2103,7 +2071,7 @@ function SimulationApp() {
       }
 
       if (next >= 1) {
-        setVoyagerMode(false);
+        setVoyagerPlaying(false);
         return;
       }
 
@@ -2112,7 +2080,7 @@ function SimulationApp() {
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [voyagerMode, ensureVoyagerBody]);
+  }, [voyagerMode, voyagerPlaying, ensureVoyagerBody, engine]);
   const act = useCallback(
     (fn) => {
       try {
@@ -2251,6 +2219,8 @@ function SimulationApp() {
         )
       )
         setSceneRevision((v) => v + 1);
+      if (event.type === "pauseStateChanged")
+        refresh((v) => v + 1);
       if (event.type === "simulationReset") {
         setEffects([]);
         setEnduranceVisible(true);
@@ -2343,8 +2313,13 @@ function SimulationApp() {
       story.progress += 0.1 / CHAPTERS[story.chapter].duration;
       setStoryProgress(Math.min(1, story.progress));
       if (story.progress >= 1) {
-        if (story.chapter < 7) startChapter(story.chapter + 1);
-        else engine.pause();
+        if (story.chapter < STORY_CHAPTERS.length - 1) startChapter(story.chapter + 1);
+        else {
+          story.progress = 1;
+          setStoryProgress(1);
+          engine.pause();
+          onChange();
+        }
       }
     }, 100);
     return () => clearInterval(timer);
@@ -2458,7 +2433,11 @@ function SimulationApp() {
       if (seeking) return;
       if (e.code === "Space") {
         e.preventDefault();
-        engine.paused ? engine.resume() : engine.pause();
+        if (voyagerMode) {
+          setVoyagerPlaying((p) => !p);
+        } else {
+          engine.paused ? engine.resume() : engine.pause();
+        }
       }
       if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -2478,7 +2457,7 @@ function SimulationApp() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [cancelStorySeek, engine, onChange, seeking, seekHistoryBy]);
+  }, [cancelStorySeek, engine, onChange, seeking, seekHistoryBy, voyagerMode]);
 
   const deepTimeProgress = Math.max(0, Math.min(1, deepTimeTarget / 5e9));
   const activeEffect = effects.at(-1);
@@ -2580,8 +2559,9 @@ function SimulationApp() {
           </span>
           <button
             className={`icon-button ${settings.sound ? "active" : ""}`}
-            title={settings.sound ? "Mute sound" : "Enable sound"}
-            aria-label={settings.sound ? "Mute sound" : "Enable sound"}
+            title={settings.sound ? "Mute audio" : "Unmute audio"}
+            aria-label={settings.sound ? "Mute audio" : "Unmute audio"}
+            aria-pressed={!settings.sound}
             onClick={() => {
               setSetting("sound", !settings.sound);
               if (!settings.sound) playTone("click", settings.volume);
@@ -2624,11 +2604,11 @@ function SimulationApp() {
       )}
       {voyagerMode && <div className="voyager-hud">
         <div className="eyebrow">VOYAGER 1 · MISSION HUD</div>
-        <div className="mission-title">{voyagerStory["voyager-1-journey"].waypoints[voyagerWaypointIndex(voyagerStory["voyager-1-journey"].waypoints, 1977 + (2012 - 1977) * voyagerProgress)].label}</div>
+        <div className="mission-title">{voyagerStory["voyager-1-journey"].waypoints[voyagerWaypointIndex(voyagerStory["voyager-1-journey"].waypoints, missionYearAt(voyagerProgress, voyagerStory["voyager-1-journey"].waypoints))].label}</div>
         <div className="hud-grid">
-          <div><strong>{(1977 + (2012 - 1977) * voyagerProgress).toFixed(0)}</strong><span>MISSION YEAR</span></div>
+          <div><strong>{Math.floor(missionYearAt(voyagerProgress, voyagerStory["voyager-1-journey"].waypoints))}</strong><span>MISSION YEAR</span></div>
           <div><strong>17.0</strong><span>KM/S</span></div>
-          <div><strong>{(165 * voyagerProgress).toFixed(1)}</strong><span>AU FROM EARTH</span></div>
+          <div><strong>{estimateVoyagerDistance(voyagerStory["voyager-1-journey"].display).au.toFixed(1)}</strong><span>EST. AU FROM EARTH TODAY</span></div>
         </div>
       </div>}
       {deepTimeTarget > 0 && <div className="voyager-hud" style={{left:24,bottom:190}}>
@@ -2774,13 +2754,16 @@ function SimulationApp() {
           />
         )}
         {panel === "voyager" && (
-          <VoyagerPanel
+          <VoyagerMissionPanel
             story={voyagerStory["voyager-1-journey"]}
             engine={engine}
             progress={voyagerProgress}
             setProgress={setVoyagerProgress}
             active={voyagerMode}
             setActive={setVoyagerMode}
+            playing={voyagerPlaying}
+            setPlaying={setVoyagerPlaying}
+            onExit={() => { setVoyagerPlaying(false); setVoyagerMode(false); setPanel(null); home(); }}
             onSelect={select}
             deepTimeTarget={deepTimeTarget}
             setDeepTimeTarget={setDeepTimeTarget}
@@ -3063,7 +3046,7 @@ function SimulationApp() {
                 } else startChapter(chapter + 1);
               }}
             >
-              {chapter === 7 ? "Enter sandbox" : "Next chapter"}
+              {chapter === STORY_CHAPTERS.length - 1 ? "Enter sandbox" : "Next chapter"}
               <Icon name="chevron" />
             </button>
             <button
@@ -3188,6 +3171,7 @@ function SimulationApp() {
               <Icon name="undo" size={16} />
             </button>
           </div>
+          <FutureTimeline engine={engine} onChange={onChange} act={act} />
           <div className="history-track">
             <input
               aria-label="Simulation history"

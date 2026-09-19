@@ -1,4 +1,5 @@
 import React from "react";
+import GravitationalLensing from "../../scene/GravitationalLensing.jsx";
 import {
   EffectComposer,
   Bloom,
@@ -22,6 +23,8 @@ export default function CinematicPostFX({
   intensity = 0,
   reducedMotion = false,
   enabled = true,
+  engine,
+  settings,
 }) {
   if (quality === "low") {
     return (
@@ -39,19 +42,20 @@ export default function CinematicPostFX({
   return (
     <EffectComposer
       multisampling={high ? 4 : 2}
-      resolutionScale={high ? 1 : 0.82}
+      resolutionScale={1}
       mergeMode="auto"
       enabled={enabled}
     >
+      {engine && settings && <GravitationalLensing engine={engine} settings={settings} />}
       <Bloom
         enabled={enabled}
         mipmapBlur
-        intensity={0.42 + event * 0.62}
-        luminanceThreshold={0.82}
-        luminanceSmoothing={0.16}
+        intensity={0.35 + event * 0.5}
+        luminanceThreshold={0.92}
+        luminanceSmoothing={0.25}
       />
 
-      {!reducedMotion && (
+      {!reducedMotion && event > 0.05 && (
         <ChromaticAberration
           enabled={enabled}
           offset={[0.00012 + event * 0.00075, 0.00006 + event * 0.00038]}
@@ -62,7 +66,9 @@ export default function CinematicPostFX({
       )}
 
       <EffectGroup enabled={enabled && !reducedMotion}>
-        <Noise premultiply opacity={high ? 0.018 : 0.012} />
+        {event > 0.1 && (
+          <Noise premultiply opacity={(high ? 0.018 : 0.012) * event} />
+        )}
         <Vignette offset={0.24} darkness={0.58 + event * 0.08} eskil={false} />
       </EffectGroup>
 

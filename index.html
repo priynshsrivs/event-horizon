@@ -10,54 +10,12 @@
     />
     <title>Event Horizon · Universe Laboratory</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   
-<!-- EH GLOBAL MUSIC START -->
-<audio
-  id="eh-global-music"
-  src="/audio/interstellar.mp3"
-  loop
-  preload="auto"
-></audio>
 
-<script>
-(() => {
-  const audio = document.getElementById("eh-global-music");
-  if (!audio) return;
-
-  audio.volume = 0.16;
-
-  let started = false;
-
-  const startMusic = async () => {
-    if (started) return;
-
-    try {
-      await audio.play();
-      started = true;
-
-      window.removeEventListener("pointerdown", startMusic);
-      window.removeEventListener("keydown", startMusic);
-      window.removeEventListener("touchstart", startMusic);
-    } catch (err) {
-      // Chrome may require another user gesture.
-    }
-  };
-
-  window.addEventListener("pointerdown", startMusic, { passive: true });
-  window.addEventListener("keydown", startMusic, { passive: true });
-  window.addEventListener("touchstart", startMusic, { passive: true });
-
-  window.addEventListener("beforeunload", () => {
-    audio.pause();
-  });
-})();
-</script>
-<!-- EH GLOBAL MUSIC END -->
 
 </body>
 </html>

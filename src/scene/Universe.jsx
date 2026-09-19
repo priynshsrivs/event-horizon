@@ -1,3 +1,4 @@
+import { missionCameraOffset } from "../physics/voyager.js";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -139,6 +140,7 @@ function loadTexture(name) {
           }
         }
         registerTextureStatus(name, "missing", { candidates: textureCandidates(name) });
+        textureCache.set(name, null);
         return null;
       })(),
     );
@@ -690,7 +692,7 @@ function EarthLayers({ radius, body, engine, settings }) {
     <>
       {night && (
         <mesh ref={nightRef} renderOrder={2}>
-          <sphereGeometry args={[radius * 1.002, settings.quality === "medium" ? 40 : 56, settings.quality === "medium" ? 28 : 40]} />
+          <sphereGeometry args={[radius * 1.008, settings.quality === "medium" ? 40 : 56, settings.quality === "medium" ? 28 : 40]} />
           <shaderMaterial
             uniforms={{
               nightMap: { value: night },
@@ -700,7 +702,7 @@ function EarthLayers({ radius, body, engine, settings }) {
             vertexShader={earthNightVertex}
             fragmentShader={earthNightFragment}
             transparent
-            depthTest={false}
+            depthTest={true}
             depthWrite={false}
             blending={THREE.AdditiveBlending}
             side={THREE.FrontSide}
@@ -712,7 +714,7 @@ function EarthLayers({ radius, body, engine, settings }) {
           ref={cloudRef}
           renderOrder={4}
           rotation={[0, 0.02, 0]}
-          scale={[1.018, 1.018, 1.018]}
+          scale={[1.024, 1.024, 1.024]}
         >
           <sphereGeometry
             args={[
@@ -1119,7 +1121,7 @@ function EHAtmosphericBands({
   return (
     <mesh
       ref={ref}
-      scale={[1.006, 1.006, 1.006]}
+      scale={[1.02, 1.02, 1.02]}
       renderOrder={4}
     >
       <sphereGeometry
@@ -1288,14 +1290,12 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
               />
               {star ? (
                 <meshBasicMaterial
-                  key={texture?.uuid || "fallback"}
                   map={body.metadata.stellarEvolutionPhase ? null : texture}
                   color={body.metadata.stellarEvolutionPhase ? color : (texture ? "#ffe5bf" : color)}
                   toneMapped
                 />
               ) : (
                 <meshStandardMaterial
-                  key={texture?.uuid || "fallback"}
                   map={texture}
                   normalMap={normalTexture || null}
                   normalScale={
@@ -1465,7 +1465,6 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
             center
             position={[radius * 1.5, radius * 1.7, 0]}
             distanceFactor={undefined}
-            zIndexRange={[2, 0]}
             style={{ pointerEvents: building ? "none" : "auto" }}
           >
             <button
@@ -1953,10 +1952,13 @@ function Effect({ effect, engine, compressed, settings }) {
 }
 
 const VOYAGER_DISPLAY_WAYPOINTS = [
-  [4.6, 0.3, 0.0],   // 1977 · Earth launch
-  [9.6, 0.8, -0.6],  // 1979 · Jupiter
-  [14.8, 1.2, -1.5], // 1980 · Saturn
-  [31.0, 2.6, -5.8], // 2012 · interstellar space
+  [4.6, 0.3, 0.0],   // 1977: launch
+  [9.6, 0.8, -0.6],  // 1979: Jupiter
+  [14.8, 1.2, -1.5], // 1980: Saturn
+  [22, 1.8, -3],     // 1990: Pale Blue Dot
+  [31, 2.6, -5.8],   // 2012: heliopause
+  [38, 3.4, -7],     // present
+  [46, 4.2, -9],     // continued outward journey
 ];
 
 function sampleVoyagerDisplayPosition(progress = 0) {
@@ -1988,7 +1990,7 @@ function VoyagerJourneyContext({ progress = 0 }) {
     { label: "EARTH", position: VOYAGER_DISPLAY_WAYPOINTS[0], size: 0.16, color: "#79b7d8" },
     { label: "JUPITER", position: VOYAGER_DISPLAY_WAYPOINTS[1], size: 0.28, color: "#d6b98a" },
     { label: "SATURN", position: VOYAGER_DISPLAY_WAYPOINTS[2], size: 0.24, color: "#d9caa5" },
-    { label: "INTERSTELLAR", position: VOYAGER_DISPLAY_WAYPOINTS[3], size: 0.14, color: "#9be5df" },
+    { label: "INTERSTELLAR", position: VOYAGER_DISPLAY_WAYPOINTS[4], size: 0.14, color: "#9be5df" },
   ];
 
   return (
@@ -2138,7 +2140,7 @@ function CameraController({
     const voyager = engine.getBody("voyager-1");
     if (voyagerActive && voyager) {
       target.current.set(...sampleVoyagerDisplayPosition(voyagerProgress));
-      offset.current.copy(voyagerCameraOffset(voyagerProgress));
+      offset.current.set(...missionCameraOffset(voyagerProgress));
       orbit.minDistance = 0.35;
     } else if (enduranceFocused) {
       target.current.set(150, 20, -100);
@@ -2734,10 +2736,12 @@ function Scene({
       <ScreenCinematicFX effects={effects} settings={settings} />
 
       <CinematicPostFX
+        engine={engine}
+        settings={settings}
         quality={settings.quality}
         intensity={cinematicIntensity}
         reducedMotion={reducedMotion}
-        enabled={!cameraInteracting && settings.quality === "high"}
+        enabled={settings.quality === "high" || (settings.quality === "medium" && settings.lensing)}
       />
 
       {buildTool && (
@@ -2771,6 +2775,7 @@ export default function Universe(props) {
           antialias: props.settings.quality !== "low",
           alpha: false,
           powerPreference: "high-performance",
+          logarithmicDepthBuffer: true,
         }}
         onCreated={({ gl }) => {
           gl.setClearColor("#060a10");

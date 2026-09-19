@@ -1,3 +1,4 @@
+import { advanceEllipse, MAX_FUTURE_YEARS } from "./timeline.js";
 /**
  * Event Horizon simulation kernel. No renderer, DOM, React or Three.js dependencies.
  * Positions/radii: AU. Mass: M☉. Time: Julian years. Temperature: kelvin.
@@ -29,7 +30,7 @@ export const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 export const DEFAULT_FIXED_DT = 1 / 32768;
 export const MIN_FIXED_DT = 1 / 2097152;
 export const MAX_TIME_SCALE = 100000;
-export const DEEP_TIME_MAX_YEARS = 5e9;
+export const DEEP_TIME_MAX_YEARS = MAX_FUTURE_YEARS;
 const lateRedGiantColor = (temperature) => {
   const t = clamp((temperature - 3000) / 2772, 0, 1);
   return `#${[0.95, 0.22 + 0.25 * t, 0.10 + 0.16 * t].map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("")}`;
@@ -429,6 +430,7 @@ export class PhysicsEngine {
     const body = data instanceof CelestialBody ? data : new CelestialBody(data);
     if (this.getBody(body.id))
       throw new Error(`Duplicate body identifier: ${body.id}`);
+    if (isStar(body) && body.metadata.initialMass == null) body.metadata.initialMass = body.mass;
     this.bodies.push(body);
     this.emit("bodyAdded", { body });
     return body;
@@ -476,9 +478,11 @@ export class PhysicsEngine {
   pause() {
     this.paused = true;
     this.accumulator = 0;
+    this.emit("pauseStateChanged", { paused: true });
   }
   resume() {
     this.paused = false;
+    this.emit("pauseStateChanged", { paused: false });
   }
   setTimeScale(value) {
     // Time scale is intentionally allowed to exceed the normal UI presets.
@@ -1285,15 +1289,22 @@ export class PhysicsEngine {
     this.emit("solarFlare", { star, flare, position: star.position.clone() });
     return flare;
   }
+  supernovaEligibility(id) {
+    const star = this.getBody(id);
+    const initialMass = star?.metadata.initialMass ?? star?.mass;
+    const eligible = !!star && isStar(star) && !["white dwarf", "neutron star", "magnetar", "brown dwarf"].includes(star.type) && initialMass >= 8;
+    return { eligible, initialMass, reason: eligible ? "" : "Core-collapse requires an initial mass of about 8 Suns or more. The Sun instead becomes a red giant, sheds its outer layers, and leaves a white dwarf." };
+  }
   triggerSupernova(id) {
     const star = this.getBody(id);
     if (!star || !isStar(star)) return null;
-    if (star.mass < 8) return this.triggerPlanetaryNebula(star.id);
+    if (!this.supernovaEligibility(id).eligible) return null;
     if (this.bodies.length + 12 > this.maxBodies)
       throw new Error("Supernova needs room for 12 ejecta bodies.");
     const mass = star.mass;
-    const retained = mass > 20 ? mass * 0.3 : Math.max(1.2, mass * 0.14);
-    const type = mass > 20 ? "black hole" : "neutron star";
+    const initialMass = star.metadata.initialMass ?? mass;
+    const retained = initialMass > 20 ? mass * 0.3 : Math.min(mass * 0.9, Math.max(1.2, mass * 0.14));
+    const type = initialMass > 20 ? "black hole" : "neutron star";
     this.removeBody(star.id);
     const remnant = this.spawnBody(type, {
       name: `${star.name} remnant`,
@@ -1383,8 +1394,9 @@ export class PhysicsEngine {
     const mass = Math.max(star.metadata.initialMass ?? star.mass, 1e-9);
     const age = Math.max(0, finite(elapsedYears));
     if (mass >= 8) return { phase: "massive-main-sequence", ageYears: age, radiusSolar: Math.max(1, mass ** 0.8), luminositySolar: Math.max(1, mass ** 3.5), temperature: star.temperature };
-    if (mass <= 1.1 && age >= 3.8e9) {
-      const late = clamp((age - 3.8e9) / 1.2e9, 0, 1);
+    const giantStart = mass >= 0.9 && mass <= 1.1 ? 3.8e9 : 1e10 / mass ** 2.5;
+    if (age >= giantStart) {
+      const late = clamp((age - giantStart) / (giantStart * 0.3157894737), 0, 1);
       return { phase: late < 0.68 ? "red-giant-branch" : "asymptotic-giant-branch", ageYears: age, radiusSolar: 1 + 199 * late, luminositySolar: 1 + 1800 * late, temperature: 5772 - 2772 * late };
     }
     return { phase: "main-sequence", ageYears: age, radiusSolar: 1, luminositySolar: this.stellarModel(mass).luminosity, temperature: this.stellarModel(mass).temperature };
@@ -1393,8 +1405,14 @@ export class PhysicsEngine {
     const target = clamp(finite(elapsedYears), 0, DEEP_TIME_MAX_YEARS);
     this.time = target;
     const changes = [];
-    for (const star of this.bodies.filter(isStar)) {
+    for (const star of this.bodies.filter(b => isStar(b) && !["white dwarf", "neutron star", "magnetar", "brown dwarf"].includes(b.type))) {
       star.metadata.initialMass ??= star.mass;
+      const lifetime = 1e10 / star.metadata.initialMass ** 2.5;
+      if (star.metadata.initialMass >= 8 && target >= lifetime) {
+        this.triggerSupernova(star.id);
+        continue;
+      }
+      const shedLayers = star.metadata.initialMass < 8 && target >= (star.metadata.initialMass >= 0.9 && star.metadata.initialMass <= 1.1 ? 7e9 : lifetime * 1.2);
       const evolution = this.stellarEvolutionState(star, target);
       if (!evolution) continue;
       if (evolution.phase === "red-giant-branch" || evolution.phase === "asymptotic-giant-branch") {
@@ -1418,15 +1436,47 @@ export class PhysicsEngine {
           }
         }
       }
+      if (shedLayers && this.getBody(star.id)) this.triggerPlanetaryNebula(star.id);
     }
     this.emit("deepTime", { targetYears: target, changes });
     return changes;
   }
-  fastForwardDeepTime(targetYears = DEEP_TIME_MAX_YEARS) {
-    const target = clamp(finite(targetYears), 0, DEEP_TIME_MAX_YEARS);
-    const magnitude = Math.abs(target - this.time);
-    for (const delta of logarithmicTimelineSteps(magnitude)) this.time += target >= this.time ? delta : -delta;
+  advanceFuture(years) {
+    if (!Number.isFinite(years) || years < 0 || this.time + years > DEEP_TIME_MAX_YEARS) throw new RangeError("Future time must be finite, nonnegative and within 100 billion years.");
+    if (years === 0) return [];
+    const target = this.time + years;
+    // Short advances retain the full integrator; work is capped at 512 steps.
+    if (years <= this.fixedDt * 512) {
+      let remaining = years;
+      while (remaining > 1e-15) {
+        const dt = Math.min(remaining, this.fixedDt);
+        this.step(dt, { record: false });
+        remaining -= dt;
+      }
+    } else {
+      const primary = this.bodies.filter(b => b.enabled && b.active).reduce((a,b) => !a || b.mass > a.mass ? b : a, null);
+      if (primary) {
+        const updates = this.bodies.filter(b => b !== primary && b.enabled && b.active).map(body => {
+          const r = body.position.clone().sub(primary.position);
+          const v = body.velocity.clone().sub(primary.velocity);
+          const orbit = advanceEllipse(r.toArray(), v.toArray(), G*(primary.mass+body.mass)*this.gravityMultiplier, years);
+          return { body, orbit };
+        });
+        for (const {body, orbit} of updates) {
+          if (orbit) {
+            body.position.set(...orbit.position).add(primary.position);
+            body.velocity.set(...orbit.velocity).add(primary.velocity);
+          } else body.metadata.futurePositionUnresolved = true;
+          body._previous?.copy(body.position);
+        }
+      }
+    }
+    this.accumulator = 0;
     return this.applyDeepTime(target);
+  }
+  fastForwardDeepTime(targetYears = 5e9) {
+    if (targetYears < this.time) throw new RangeError("Reset to start before choosing an earlier future.");
+    return this.advanceFuture(targetYears - this.time);
   }
 
   calculateOrbitalElements(body, primary) {

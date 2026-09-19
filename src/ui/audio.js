@@ -1,4 +1,44 @@
 let context = null;
+let master = null;
+let music = null;
+let volume = 0.25;
+let muted = true;
+try { muted = globalThis.localStorage?.getItem("eh-muted") !== "false"; } catch {}
+const listeners = new Set();
+export const getMuted = () => muted;
+export function subscribeAudio(listener) { listeners.add(listener); return () => listeners.delete(listener); }
+export function setMuted(value) {
+  muted = !!value;
+  try { globalThis.localStorage?.setItem("eh-muted", String(muted)); } catch {}
+  if (master) master.gain.value = muted ? 0 : 1;
+  if (music) { music.muted = muted; if (muted) music.pause(); }
+  if (!muted) unlockAudio();
+  for (const listener of listeners) listener(muted);
+}
+export function setAudioVolume(value) {
+  volume = clampVolume(value);
+  if (music) music.volume = volume * 0.64;
+}
+export function unlockAudio() {
+  if (muted || typeof window === "undefined") return;
+  try {
+    if (!music) { music = new Audio("/audio/interstellar.mp3"); music.loop = true; music.preload = "none"; }
+    music.muted = muted;
+    music.volume = volume * 0.64;
+    if (music.paused) music.play()?.catch(() => {});
+    if (context?.state === "suspended") context.resume()?.catch(() => {});
+  } catch {}
+}
+export function mountAudio() {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("pointerdown", unlockAudio);
+  window.addEventListener("keydown", unlockAudio);
+  return () => {
+    window.removeEventListener("pointerdown", unlockAudio);
+    window.removeEventListener("keydown", unlockAudio);
+    disposeAudio();
+  };
+}
 
 const SOUND_DEFINITIONS = Object.freeze({
   click: {
@@ -87,7 +127,7 @@ export function playTone(kind = "click", volume = 0.25) {
   const definition = SOUND_DEFINITIONS[kind] || SOUND_DEFINITIONS.click;
   const safeVolume = clampVolume(volume);
 
-  if (safeVolume <= 0) return false;
+  if (muted || safeVolume <= 0) return false;
 
   const audio = getAudioContext();
   if (!audio) return false;
@@ -123,7 +163,8 @@ export function playTone(kind = "click", volume = 0.25) {
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     oscillator.connect(gain);
-    gain.connect(audio.destination);
+    if (!master) { master = audio.createGain(); master.gain.value = muted ? 0 : 1; master.connect(audio.destination); }
+    gain.connect(master);
 
     oscillator.addEventListener(
       "ended",
@@ -148,6 +189,8 @@ export function playTone(kind = "click", volume = 0.25) {
 }
 
 export function disposeAudio() {
+  if (music) { music.pause(); music.removeAttribute("src"); music.load(); music = null; }
+  master = null;
   const audio = context;
   context = null;
 

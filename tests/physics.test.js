@@ -216,7 +216,7 @@ test("supernova creates physical ejecta and compact remnant with conserved mass"
   close(momentum(e.bodies).distanceTo(p), 0, 1e-10);
 });
 
-test("Sun-mass supernova request becomes planetary nebula white dwarf", () => {
+test("explicit planetary nebula creates white dwarf and adjusts orbits", () => {
   const e = quietEngine();
   const sun = e.spawnBody("star", { id: "sun", name: "Sun", mass: 1 });
   const planet = e.spawnBody("planet", {
@@ -225,7 +225,7 @@ test("Sun-mass supernova request becomes planetary nebula white dwarf", () => {
     velocity: [0, 6.28, 0],
     metadata: { primaryId: "sun" },
   });
-  const remnant = e.triggerSupernova("sun");
+  const remnant = e.triggerPlanetaryNebula("sun");
   assert.equal(remnant.type, "white dwarf");
   assert.ok(remnant.mass >= 0.54 && remnant.mass <= 0.6);
   assert.equal(remnant.metadata.planetaryNebula, true);

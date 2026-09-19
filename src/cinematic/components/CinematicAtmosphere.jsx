@@ -9,7 +9,7 @@ export default function CinematicAtmosphere({
   color = "#8ddff2",
   intensity = 0.8,
   quality = "medium",
-  reducedMotion = false,
+  _reducedMotion = false,
 }) {
   const { camera } = useThree();
 
