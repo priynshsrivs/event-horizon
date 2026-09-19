@@ -29,6 +29,22 @@ export const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 export const DEFAULT_FIXED_DT = 1 / 32768;
 export const MIN_FIXED_DT = 1 / 2097152;
 export const MAX_TIME_SCALE = 100000;
+export const DEEP_TIME_MAX_YEARS = 5e9;
+const lateRedGiantColor = (temperature) => {
+  const t = clamp((temperature - 3000) / 2772, 0, 1);
+  return `#${[0.95, 0.22 + 0.25 * t, 0.10 + 0.16 * t].map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("")}`;
+};
+const logarithmicTimelineSteps = (magnitude, count = 18) => {
+  if (magnitude <= 0) return [];
+  const steps = [];
+  let remaining = magnitude;
+  for (let i = count - 1; i >= 0; i--) {
+    const step = remaining / (i + 1);
+    steps.push(step);
+    remaining -= step;
+  }
+  return steps;
+};
 const finite = (x, fallback = 0) =>
   Number.isFinite(Number(x)) ? Number(x) : fallback;
 const jsonClone = (x) => JSON.parse(JSON.stringify(x));
@@ -1272,18 +1288,19 @@ export class PhysicsEngine {
   triggerSupernova(id) {
     const star = this.getBody(id);
     if (!star || !isStar(star)) return null;
+    if (star.mass < 8) return this.triggerPlanetaryNebula(star.id);
     if (this.bodies.length + 12 > this.maxBodies)
       throw new Error("Supernova needs room for 12 ejecta bodies.");
-    const mass = star.mass,
-      retained = mass > 20 ? mass * 0.3 : mass * 0.2,
-      type = mass > 20 ? "black hole" : "neutron star";
+    const mass = star.mass;
+    const retained = mass > 20 ? mass * 0.3 : Math.max(1.2, mass * 0.14);
+    const type = mass > 20 ? "black hole" : "neutron star";
     this.removeBody(star.id);
     const remnant = this.spawnBody(type, {
       name: `${star.name} remnant`,
       mass: retained,
       position: star.position,
       velocity: star.velocity,
-      metadata: { collisionCooldown: this.time + 0.01 },
+      metadata: { collisionCooldown: this.time + 0.01, stellarRemnantOf: star.id },
     });
     remnant.angularVelocity
       .copy(star.angularVelocity)
@@ -1307,6 +1324,110 @@ export class PhysicsEngine {
     });
     return remnant;
   }
+  triggerPlanetaryNebula(id) {
+    const star = this.getBody(id);
+    if (!star || !isStar(star)) return null;
+    const initialMass = star.mass;
+    const retained = clamp(initialMass, 0.54, 0.6);
+    const remnantPosition = star.position.clone();
+    const remnantVelocity = star.velocity.clone();
+    const removedMass = Math.max(0, initialMass - retained);
+    this.removeBody(star.id);
+    const remnant = this.spawnBody("white dwarf", {
+      name: `${star.name} white dwarf`,
+      mass: retained,
+      position: remnantPosition,
+      velocity: remnantVelocity,
+      temperature: Math.max(12000, star.temperature),
+      luminosity: Math.min(0.01, Math.max(0.0001, star.luminosity * 0.01)),
+      metadata: {
+        collisionCooldown: this.time + 0.01,
+        stellarRemnantOf: star.id,
+        planetaryNebula: true,
+        nebulaStartTime: this.time,
+      },
+    });
+    const scale = initialMass / retained;
+    for (const body of this.bodies) {
+      if (body === remnant || !body.active || !body.enabled) continue;
+      const radiusVector = body.position.clone().sub(remnant.position);
+      const r = radiusVector.length();
+      const orbitLike = body.metadata.primaryId === star.id || (body.type === "planet" && r < 20);
+      if (r <= 0 || !orbitLike) continue;
+      const radial = radiusVector.clone().normalize();
+      const velocity = body.velocity.clone().sub(remnant.velocity);
+      const radialVelocity = radial.clone().multiplyScalar(velocity.dot(radial));
+      const tangentialVelocity = velocity.clone().sub(radialVelocity);
+      body.position.copy(remnant.position).addScaledVector(radiusVector, scale);
+      body.velocity.copy(remnant.velocity).addScaledVector(radialVelocity, 1).addScaledVector(tangentialVelocity, Math.sqrt(retained / initialMass));
+      body.metadata.orbitAdjustedForStellarMassLoss = true;
+    }
+    const shellSource = star.clone();
+    shellSource.mass = Math.max(removedMass, 1e-12);
+    shellSource.radius = Math.max(star.radius, 0.01);
+    shellSource.metadata = { ...shellSource.metadata, planetaryNebula: true };
+    const ejecta = removedMass > 0 ? this.generateDebris(shellSource, removedMass, msToAUPerYear(25), 8, 8) : [];
+    this.emit("planetaryNebula", {
+      star,
+      remnant,
+      ejecta,
+      position: remnantPosition,
+      removedMass,
+      remnantMass: retained,
+    });
+    return remnant;
+  }
+  stellarEvolutionState(starOrId, elapsedYears = this.time) {
+    const star = typeof starOrId === "object" ? starOrId : this.getBody(starOrId);
+    if (!star || !isStar(star)) return null;
+    const mass = Math.max(star.metadata.initialMass ?? star.mass, 1e-9);
+    const age = Math.max(0, finite(elapsedYears));
+    if (mass >= 8) return { phase: "massive-main-sequence", ageYears: age, radiusSolar: Math.max(1, mass ** 0.8), luminositySolar: Math.max(1, mass ** 3.5), temperature: star.temperature };
+    if (mass <= 1.1 && age >= 3.8e9) {
+      const late = clamp((age - 3.8e9) / 1.2e9, 0, 1);
+      return { phase: late < 0.68 ? "red-giant-branch" : "asymptotic-giant-branch", ageYears: age, radiusSolar: 1 + 199 * late, luminositySolar: 1 + 1800 * late, temperature: 5772 - 2772 * late };
+    }
+    return { phase: "main-sequence", ageYears: age, radiusSolar: 1, luminositySolar: this.stellarModel(mass).luminosity, temperature: this.stellarModel(mass).temperature };
+  }
+  applyDeepTime(elapsedYears = this.time, { destroyEngulfed = true } = {}) {
+    const target = clamp(finite(elapsedYears), 0, DEEP_TIME_MAX_YEARS);
+    this.time = target;
+    const changes = [];
+    for (const star of this.bodies.filter(isStar)) {
+      star.metadata.initialMass ??= star.mass;
+      const evolution = this.stellarEvolutionState(star, target);
+      if (!evolution) continue;
+      if (evolution.phase === "red-giant-branch" || evolution.phase === "asymptotic-giant-branch") {
+        star.type = "red giant";
+        star.radius = (evolution.radiusSolar * SOLAR_RADIUS_M) / AU_M;
+        star.luminosity = evolution.luminositySolar;
+        star.temperature = evolution.temperature;
+        star.metadata.color = lateRedGiantColor(evolution.temperature);
+        star.metadata.stellarEvolutionPhase = evolution.phase;
+        star.metadata.stellarEvolutionAge = target;
+        star.metadata.visualSize = Math.max(star.metadata.visualSize || 0.1, 0.1 + evolution.radiusSolar * 0.02);
+        changes.push({ star, evolution });
+        if (destroyEngulfed) {
+          for (const body of [...this.bodies]) {
+            if (body === star || body.type === "debris" || body.type === "asteroid" || !body.enabled) continue;
+            if (body.position.distanceTo(star.position) <= star.radius) {
+              this.removeBody(body.id);
+              changes.push({ destroyed: body.id, star: star.id });
+            }
+          }
+        }
+      }
+    }
+    this.emit("deepTime", { targetYears: target, changes });
+    return changes;
+  }
+  fastForwardDeepTime(targetYears = DEEP_TIME_MAX_YEARS) {
+    const target = clamp(finite(targetYears), 0, DEEP_TIME_MAX_YEARS);
+    const magnitude = Math.abs(target - this.time);
+    for (const delta of logarithmicTimelineSteps(magnitude)) this.time += target >= this.time ? delta : -delta;
+    return this.applyDeepTime(target);
+  }
+
   calculateOrbitalElements(body, primary) {
     if (!body || !primary || body === primary) return null;
     const r = body.position.clone().sub(primary.position),
