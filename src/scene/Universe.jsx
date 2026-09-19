@@ -2376,6 +2376,7 @@ function Scene({
   onEnduranceFocus,
   voyagerActive = false,
   voyagerProgress = 0,
+  nebulaId = null,
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const cinematicIntensity = Math.min(
