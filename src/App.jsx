@@ -636,6 +636,7 @@ function VoyagerPanel({ story, engine, progress, setProgress, active, setActive,
         <label className="range-label">MISSION YEAR <output>{Math.round(missionYear)}</output>
           <input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => {
             const value = +e.target.value;
+            setActive(false);
             setProgress(value);
             ensureVoyagerBody(value);
             onSelect("voyager-1");
@@ -2039,6 +2040,30 @@ function SimulationApp() {
     }
     return voyager;
   }, [engine, interpolateVoyager]);
+
+  useEffect(() => {
+    if (!voyagerMode) return undefined;
+
+    const startedAt = performance.now();
+    const startProgress = voyagerProgress;
+    const durationMs = Math.max(18000, (1 - startProgress) * 32000);
+    let raf = 0;
+
+    const tick = (now) => {
+      const next = Math.min(1, startProgress + (now - startedAt) / durationMs);
+      setVoyagerProgress(next);
+      ensureVoyagerBody(next);
+
+      if (next >= 1) {
+        setVoyagerMode(false);
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [voyagerMode]);
   const act = useCallback(
     (fn) => {
       try {
