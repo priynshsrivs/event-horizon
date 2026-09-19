@@ -13,6 +13,7 @@ import CinematicParticles from "../cinematic/components/CinematicParticles.jsx";
 import CinematicShockwave from "../cinematic/components/CinematicShockwave.jsx";
 import CinematicWormhole from "../cinematic/components/CinematicWormhole.jsx";
 import CinematicAtmosphere from "../cinematic/components/CinematicAtmosphere.jsx";
+import Endurance from "./Endurance.jsx";
 import {
   Vector3,
   CelestialBody,
@@ -2267,7 +2268,8 @@ function Scene({
   const bodies = engine.getBodies();
   return (
     <>
-      <SpaceBackground settings={settings} />
+      <Endurance visible={settings.enduranceVisible !== false} onFocus={() => {}} />
+            <SpaceBackground settings={settings} />
 
       <CinematicParticles
         quality={settings.quality}
