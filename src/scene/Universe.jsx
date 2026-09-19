@@ -2418,7 +2418,7 @@ function ScreenCinematicFX({ effects, settings }) {
 
     const latest = effects.length ? effects[effects.length - 1] : null;
     const age = latest ? Math.max(0, (Date.now() - latest.at) / 1000) : 999;
-    const duration = latest?.type === "supernova" ? 1.8 : 1.05;
+    const duration = latest?.type === "supernova" ? 3.15 : 1.05;
     if (!latest || age >= duration || reduced) {
       if (flash.current) flash.current.material.opacity = reduced ? 0 : 0;
       if (ring.current) ring.current.material.opacity = 0;
