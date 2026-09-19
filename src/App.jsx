@@ -605,7 +605,7 @@ function BodyEditor({ body, engine, onChange, notify }) {
   );
 }
 
-function VoyagerPanel({ story, engine, progress, setProgress, active, setActive, onSelect, deepTimeTarget, setDeepTimeTarget, act }) {
+function VoyagerPanel({ story, engine, progress, setProgress, active, setActive, onSelect, deepTimeTarget, setDeepTimeTarget, act, ensureVoyagerBody }) {
   const idx = Math.min(story.waypoints.length - 1, Math.floor(progress * story.waypoints.length));
   const waypoint = story.waypoints[idx];
   const missionYear = 1977 + (2012 - 1977) * progress;
@@ -624,7 +624,12 @@ function VoyagerPanel({ story, engine, progress, setProgress, active, setActive,
           setActive(!active);
         }}>{active ? "Pause mission" : "Start mission"}</button>
         <label className="range-label">MISSION YEAR <output>{Math.round(missionYear)}</output>
-          <input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => setProgress(+e.target.value)} />
+          <input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => {
+            const value = +e.target.value;
+            setProgress(value);
+            ensureVoyagerBody(value);
+            onSelect("voyager-1");
+          }} />
         </label>
       </section>
       <section className="panel-section">
@@ -1991,8 +1996,40 @@ function SimulationApp() {
   }, []);
   const home = () => {
     setSelectedId(null);
+    setEnduranceFocused(false);
     setHomeToken((v) => v + 1);
   };
+  const voyagerPoints = [
+    [0, 0, 0],
+    [5.2, 0, 0.15],
+    [9.55, 0, -0.18],
+    [165, 0, -1.2],
+  ];
+  const interpolateVoyager = useCallback((progress) => {
+    const clamped = Math.max(0, Math.min(1, progress));
+    const scaled = clamped * (voyagerPoints.length - 1);
+    const index = Math.min(voyagerPoints.length - 2, Math.floor(scaled));
+    const t = scaled - index;
+    return voyagerPoints[index].map((v, i) => v + (voyagerPoints[index + 1][i] - v) * t);
+  }, []);
+  const ensureVoyagerBody = useCallback((progressValue) => {
+    let voyager = engine.getBody("voyager-1");
+    if (!voyager) {
+      voyager = engine.spawnBody("asteroid", {
+        id: "voyager-1",
+        name: "Voyager 1",
+        mass: 1e-10,
+        radius: 1e-9,
+        collisionMode: "ignore",
+        position: interpolateVoyager(progressValue),
+        velocity: [0.15, 0, 0.02],
+        metadata: { visualSize: 0.2, color: "#b8d9d6", voyagerMission: true }
+      });
+    } else {
+      engine.updateBody("voyager-1", { position: interpolateVoyager(progressValue) });
+    }
+    return voyager;
+  }, [engine, interpolateVoyager]);
   const act = useCallback(
     (fn) => {
       try {
@@ -2653,6 +2690,7 @@ function SimulationApp() {
             deepTimeTarget={deepTimeTarget}
             setDeepTimeTarget={setDeepTimeTarget}
             act={act}
+            ensureVoyagerBody={ensureVoyagerBody}
           />
         )}
                 {panel === "physics" && (
