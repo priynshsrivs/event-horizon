@@ -304,9 +304,9 @@ function SpaceBackground({ settings }) {
     const distance = camera.position.length();
 
     /*
-     * Render the Milky Way as Scene#background, not as a world-space mesh.
-     * This makes the galaxy independent of zoom distance, frustum clipping,
-     * culling, and camera orientation.
+     * The Milky Way is the actual WebGL scene background.
+     * It therefore does not depend on a world-space plane being
+     * inside the camera frustum.
      */
     const galaxyFade = THREE.MathUtils.smoothstep(
       distance,
@@ -327,25 +327,26 @@ function SpaceBackground({ settings }) {
       }
 
       scene.backgroundIntensity =
-        galaxyFade *
-        galaxyStrength *
-        (reduced
-          ? 1
-          : 0.985 + Math.sin(performance.now() * 0.00008) * 0.015);
+        Math.max(
+          0,
+          galaxyFade *
+            galaxyStrength *
+            (reduced
+              ? 1
+              : 0.985 +
+                Math.sin(performance.now() * 0.00008) * 0.015),
+        );
 
       scene.backgroundBlurriness = 0;
     } else {
       if (!scene.background?.isColor) {
         scene.background = new THREE.Color("#020307");
       }
+
       scene.backgroundIntensity = 1;
       scene.backgroundBlurriness = 0;
     }
 
-    /*
-     * The solar-system reference image is a DOM layer above the WebGL
-     * canvas. Fade it out as the NASA galaxy becomes the background.
-     */
     if (typeof document !== "undefined") {
       document.documentElement.style.setProperty(
         "--eh-solar-bg-opacity",
@@ -355,7 +356,11 @@ function SpaceBackground({ settings }) {
   });
 
   const density =
-    settings.quality === "low" ? 460 : settings.quality === "medium" ? 920 : 1500;
+    settings.quality === "low"
+      ? 460
+      : settings.quality === "medium"
+        ? 920
+        : 1500;
 
   return (
     <group>
@@ -368,6 +373,7 @@ function SpaceBackground({ settings }) {
         seed={21}
         reduced={reduced}
       />
+
       <AnimatedStarLayer
         count={Math.floor(density * 0.33)}
         radius={180}
@@ -378,6 +384,7 @@ function SpaceBackground({ settings }) {
         color="#a5c6d4"
         reduced={reduced}
       />
+
       <AnimatedStarLayer
         count={Math.floor(density * 0.17)}
         radius={130}
@@ -389,7 +396,6 @@ function SpaceBackground({ settings }) {
         reduced={reduced}
       />
 
-      {/* Continue the star field into the galaxy-scale view. */}
       <AnimatedStarLayer
         count={Math.floor(density * 0.12)}
         radius={1200}
@@ -403,131 +409,6 @@ function SpaceBackground({ settings }) {
 
       <CinematicDust settings={settings} reduced={reduced} />
     </group>
-  );
-}) {
-  const texture = useSafeTexture("galaxy");
-  const { camera } = useThree();
-
-  const galaxyFront = useRef();
-  const galaxyGlow = useRef();
-  const reduced = usePrefersReducedMotion();
-
-  useEffect(() => {
-    return () => {
-      if (typeof document !== "undefined") {
-        document.documentElement.style.removeProperty(
-          "--eh-solar-bg-opacity",
-        );
-      }
-    };
-  }, []);
-
-  useFrame(({ clock }) => {
-    if (!texture) return;
-
-    const distance = camera.position.length();
-
-    /*
-     * Keep the Milky Way completely hidden during normal
-     * solar-system viewing.
-     *
-     * It gradually appears as the camera leaves the
-     * solar-system scale.
-     */
-    const fade = THREE.MathUtils.smoothstep(
-      distance,
-      90,
-      820,
-    );
-
-    const qualityMultiplier =
-      settings.quality === "high"
-        ? 0.92
-        : settings.quality === "medium"
-          ? 0.82
-          : 0.70;
-
-    const pulse = reduced
-      ? 1
-      : 0.975 +
-        Math.sin(clock.elapsedTime * 0.075) * 0.025;
-
-    if (galaxyFront.current) {
-      galaxyFront.current.opacity =
-        fade * qualityMultiplier * pulse;
-    }
-
-    if (galaxyGlow.current) {
-      galaxyGlow.current.opacity =
-        fade * qualityMultiplier * 0.18 * pulse;
-    }
-
-    /*
-     * Fade the existing Solar System reference image away
-     * while the real Milky Way backdrop comes in.
-     */
-    if (typeof document !== "undefined") {
-      document.documentElement.style.setProperty(
-        "--eh-solar-bg-opacity",
-        String((0.48 * (1 - fade)).toFixed(3)),
-      );
-    }
-  });
-
-  if (!texture) return null;
-
-  return (
-    <Billboard
-      follow
-      lockX={false}
-      lockY={false}
-      lockZ={false}
-    >
-      {/* Soft outer halo */}
-      <mesh
-        position={[0, 0, -5]}
-        scale={[1.08, 1.08, 1]}
-        frustumCulled={false}
-        renderOrder={-30}
-      >
-        <planeGeometry args={[2, 2]} />
-        <meshBasicMaterial
-          ref={galaxyGlow}
-          map={texture}
-          transparent
-          opacity={0}
-          color="#91b8ff"
-          blending={THREE.AdditiveBlending}
-          side={THREE.DoubleSide}
-          depthTest={true}
-          depthWrite={false}
-          fog={false}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* Main NASA Milky Way image */}
-      <mesh
-        position={[0, 0, -5]}
-        scale={[1.0, 1.0, 1]}
-        frustumCulled={false}
-        renderOrder={-20}
-      >
-        <planeGeometry args={[2, 2]} />
-        <meshBasicMaterial
-          ref={galaxyFront}
-          map={texture}
-          transparent
-          opacity={0}
-          blending={THREE.AdditiveBlending}
-          side={THREE.DoubleSide}
-          depthTest={true}
-          depthWrite={false}
-          fog={false}
-          toneMapped={false}
-        />
-      </mesh>
-    </Billboard>
   );
 }
 
