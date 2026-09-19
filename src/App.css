@@ -10811,3 +10811,150 @@ audio[src="/audio/interstellar.mp3"] {
 .solar-system-reference {
   opacity: var(--eh-solar-bg-opacity, 0.48) !important;
 }
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.app {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+}
+/* ============================================================
+   STORY PANEL — MOVE TO BOTTOM CENTER
+   ============================================================ */
+
+.panel-slot:has(.story-panel) {
+  top: auto !important;
+  bottom: 105px !important;
+  left: 50% !important;
+  right: auto !important;
+  width: min(760px, calc(100vw - 360px)) !important;
+  height: auto !important;
+  max-height: 300px !important;
+  transform: translateX(-50%) !important;
+  z-index: 40 !important;
+}
+
+.panel-slot:has(.story-panel) .panel {
+  width: 100% !important;
+  max-height: 300px !important;
+}
+
+/* Keep story controls visible above the bottom time console */
+.story-panel {
+  position: relative !important;
+  max-height: 300px !important;
+  overflow-y: auto !important;
+}
+
+/* Don't let the story panel overlap the footer */
+@media (max-width: 900px) {
+  .panel-slot:has(.story-panel) {
+    left: 50% !important;
+    right: auto !important;
+    bottom: 100px !important;
+    width: min(680px, calc(100vw - 40px)) !important;
+    transform: translateX(-50%) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .panel-slot:has(.story-panel) {
+    left: 50% !important;
+    right: auto !important;
+    bottom: 90px !important;
+    width: calc(100vw - 24px) !important;
+    transform: translateX(-50%) !important;
+  }
+}
+
+
+/* ============================================================
+   STORY OVERLAY — FORCE BOTTOM CENTER
+   ============================================================ */
+
+.story-overlay {
+  position: fixed !important;
+
+  /* REMOVE ALL TOP POSITIONING */
+  top: auto !important;
+  right: auto !important;
+  bottom: 68px !important;
+  left: 50% !important;
+
+  /* CENTER HORIZONTALLY */
+  transform: translateX(-50%) !important;
+
+  /* SIZE */
+  width: min(790px, calc(100vw - 360px)) !important;
+  max-width: 790px !important;
+  height: auto !important;
+  max-height: 265px !important;
+
+  /* LAYERING */
+  z-index: 1000 !important;
+
+  /* DO NOT LET IT BE A FULL-SCREEN OVERLAY */
+  margin: 0 !important;
+  inset-inline-start: 50% !important;
+  inset-inline-end: auto !important;
+  inset-block-start: auto !important;
+  inset-block-end: 68px !important;
+
+  pointer-events: auto !important;
+}
+
+/* Keep the actual story content inside the panel */
+.story-overlay .story-caption {
+  width: 100% !important;
+}
+
+.story-overlay .chapter-timeline {
+  width: 100% !important;
+}
+
+.story-overlay .story-actions {
+  width: 100% !important;
+}
+
+/* Desktop */
+@media (min-width: 1200px) {
+  .story-overlay {
+    width: 790px !important;
+    bottom: 68px !important;
+  }
+}
+
+/* Laptop */
+@media (max-width: 1199px) {
+  .story-overlay {
+    width: min(760px, calc(100vw - 300px)) !important;
+    bottom: 68px !important;
+  }
+}
+
+/* Tablet */
+@media (max-width: 900px) {
+  .story-overlay {
+    width: calc(100vw - 80px) !important;
+    max-width: 760px !important;
+    bottom: 60px !important;
+  }
+}
+
+/* Mobile */
+@media (max-width: 560px) {
+  .story-overlay {
+    width: calc(100vw - 24px) !important;
+    bottom: 50px !important;
+    max-height: 55vh !important;
+  }
+}
+
