@@ -2175,7 +2175,7 @@ function ScreenCinematicFX({ effects, settings }) {
   );
 }
 
-function SceneLegacy(props) {
+function Scene({
   engine,
   selectedId,
   onSelect,
