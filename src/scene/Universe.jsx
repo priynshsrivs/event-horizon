@@ -24,6 +24,7 @@ import {
   unmapPosition,
   bodyPosition,
   compressedVisualRadius,
+  moonOrbitVisualRadius,
   visualRadius,
 } from "./coordinates.js";
 
@@ -1265,7 +1266,26 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
 function OrbitPath({ body, engine, compressed, revision }) {
   const points = useMemo(() => {
     const primary = engine.getBody(body.metadata.primaryId || "sun");
-    if (!primary || primary === body || body.type === "moon") return [];
+    if (!primary || primary === body) return [];
+
+    if (body.type === "moon") {
+      const center = new THREE.Vector3(
+        ...mapPosition(primary.position, compressed),
+      );
+      const radius = moonOrbitVisualRadius(primary);
+      const result = [];
+
+      for (let i = 0; i <= 128; i++) {
+        const a = (i / 128) * TAU;
+        result.push([
+          center.x + Math.cos(a) * radius,
+          center.y,
+          center.z + Math.sin(a) * radius,
+        ]);
+      }
+      return result;
+    }
+
     const elements = engine.calculateOrbitalElements(body, primary);
     if (
       !elements?.bound ||
@@ -2072,7 +2092,7 @@ function Scene({
       <hemisphereLight args={["#acc3d9", "#1c1713", 0.42]} />
       {settings.orbits &&
         bodies
-          .filter((b) => b.type === "planet")
+          .filter((b) => b.type === "planet" || b.type === "moon")
           .map((body) => (
             <OrbitPath
               key={body.id}
