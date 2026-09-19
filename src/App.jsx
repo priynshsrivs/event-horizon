@@ -50,7 +50,7 @@ const eventLabels = {
   deepTime: "Deep-time evolution",
   rocheLimitBreach: "Roche limit breached",
 };
-const STORY_CHAPTERS = CHAPTERS.slice(3);
+const STORY_CHAPTERS = CHAPTERS;
 
 const EXOTIC_TYPES = [
   "asteroid",
