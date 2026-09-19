@@ -35,17 +35,35 @@ const PRESENTATION_BASE = 1.77715596;
 const PRESENTATION_AMPLITUDE = 3.3298692;
 const PRESENTATION_DECAY = 1.9229232;
 
-export function compressedVisualRadius(r) {
-  const base = 4 * Math.log1p(r);
+// Additional presentation-only stretch for the outer Solar System.
+// This leaves the inner planets essentially where they are, while
+// increasing the visual separation between Mars, Jupiter, Saturn,
+// Uranus and Neptune so their enlarged visual diameters do not make
+// neighboring orbits appear crowded.
+//
+// Physics is untouched: only the rendered coordinate mapping changes.
+const OUTER_SYSTEM_START = 1.5;
+const OUTER_SYSTEM_STRETCH = 2.4;
+const OUTER_SYSTEM_POWER = 1.2;
 
+export function compressedVisualRadius(r) {
   if (r === 0) return 0;
+
+  const base = 4 * Math.log1p(r);
 
   const presentationScale =
     PRESENTATION_BASE +
     PRESENTATION_AMPLITUDE *
       Math.exp(-r / PRESENTATION_DECAY);
 
-  return base * presentationScale;
+  const outerSystemStretch =
+    OUTER_SYSTEM_STRETCH *
+    Math.pow(
+      Math.max(0, r - OUTER_SYSTEM_START),
+      OUTER_SYSTEM_POWER,
+    );
+
+  return base * presentationScale + outerSystemStretch;
 }
 
 export function mapPosition(position, compressed = true) {
@@ -81,8 +99,12 @@ export function unmapPosition(position, compressed = true) {
   let lo = 0;
   let hi = Math.max(
     1,
-    Math.expm1(visualRadius / 4)
+    visualRadius,
+    Math.expm1(visualRadius / 2),
   );
+
+  while (compressedVisualRadius(hi) < visualRadius)
+    hi *= 2;
 
   for (let i = 0; i < 36; i++) {
     const mid = (lo + hi) * 0.5;
