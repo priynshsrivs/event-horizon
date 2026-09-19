@@ -1852,7 +1852,7 @@ function CameraController({
     positionVelocity.current.set(0, 0, 0);
     targetVelocity.current.set(0, 0, 0);
     previous.current.set(0, 0, 0);
-  }, [selectedId, homeToken, settings.compressed, size.width, size.height, reduced, enduranceFocused, voyagerActive, voyagerProgress]);
+  }, [selectedId, homeToken, settings.compressed, size.width, size.height, reduced, enduranceFocused, voyagerActive]);
 
   useEffect(() => {
     if (panelOpen || storyMode)
@@ -1953,18 +1953,27 @@ function CameraController({
       }
     }
 
-    if (moving.current) {
+    if (voyagerActive && voyager) {
+      // Mission playback continuously drives both the target and camera.
+      // Do not let the ordinary Solar-System focus state fight the journey.
+      const voyagerDesired = desired.current.copy(target.current).add(offset.current);
+      const cameraFollow = reduced ? 1 : 1 - Math.exp(-dt * 3.8);
+      const targetFollow = reduced ? 1 : 1 - Math.exp(-dt * 5.5);
+
+      camera.position.lerp(voyagerDesired, cameraFollow);
+      orbit.target.lerp(target.current, targetFollow);
+      camera.lookAt(orbit.target);
+      moving.current = true;
+      userZoomed.current = false;
+      positionVelocity.current.set(0, 0, 0);
+      targetVelocity.current.set(0, 0, 0);
+    } else if (moving.current) {
       const stiffness = reduced ? 999 : 24;
       const damping = reduced ? 999 : 9.5;
       focusPulse.current = Math.max(0, focusPulse.current - dt * (reduced ? 8 : 2.8));
       const approach = 1 + focusPulse.current * 0.08;
       desired.current.copy(target.current).addScaledVector(offset.current, approach);
 
-      /*
-       * Camera placement is only used for explicit focus/home transitions.
-       * Once the user has taken control of OrbitControls (including zooming),
-       * never pull the camera back toward the old focused distance.
-       */
       if (!userZoomed.current) {
         temp.copy(desired.current).sub(camera.position);
         positionVelocity.current.addScaledVector(temp, stiffness * dt);
@@ -1991,7 +2000,7 @@ function CameraController({
       }
     }
 
-    orbit.enabled = !building && !(voyagerActive && moving.current);
+    orbit.enabled = !building && !voyagerActive;
     orbit.update();
 
     const idle =
