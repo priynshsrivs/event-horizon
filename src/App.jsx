@@ -2041,29 +2041,44 @@ function SimulationApp() {
     return voyager;
   }, [engine, interpolateVoyager]);
 
+  const voyagerPlaybackRef = useRef({
+    progress: 0,
+    lastUiUpdate: 0,
+  });
+
+  useEffect(() => {
+    voyagerPlaybackRef.current.progress = voyagerProgress;
+  }, [voyagerProgress]);
+
   useEffect(() => {
     if (!voyagerMode) return undefined;
 
     const startedAt = performance.now();
-    const startProgress = voyagerProgress;
+    const startProgress = voyagerPlaybackRef.current.progress;
     const durationMs = Math.max(18000, (1 - startProgress) * 32000);
     let raf = 0;
 
     const tick = (now) => {
       const next = Math.min(1, startProgress + (now - startedAt) / durationMs);
-      setVoyagerProgress(next);
+      voyagerPlaybackRef.current.progress = next;
       ensureVoyagerBody(next);
+
+      if (now - voyagerPlaybackRef.current.lastUiUpdate > 50 || next >= 1) {
+        voyagerPlaybackRef.current.lastUiUpdate = now;
+        setVoyagerProgress(next);
+      }
 
       if (next >= 1) {
         setVoyagerMode(false);
         return;
       }
+
       raf = requestAnimationFrame(tick);
     };
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [voyagerMode]);
+  }, [voyagerMode, ensureVoyagerBody]);
   const act = useCallback(
     (fn) => {
       try {
