@@ -45,3 +45,5 @@
 .tars-css span { position:absolute; width:3px; height:3px; top:19px; left:16px; background:#a8eee5; box-shadow:18px 0 #a8eee5; z-index:3; animation:tars-blink 3.2s steps(1,end) infinite; }
 @keyframes tars-float { 0%,100%{transform:perspective(180px) rotateY(-18deg) rotateX(3deg) translateY(0)} 50%{transform:perspective(180px) rotateY(18deg) rotateX(-3deg) translateY(-7px)} }
 @keyframes tars-blink { 0%,94%,100%{opacity:1} 95%,99%{opacity:.2} }
+.voyager-panel .panel-section:first-of-type { margin-top: 4px; }
+.voyager-panel .range-label output { min-width: 92px; text-align: right; }
