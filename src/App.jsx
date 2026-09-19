@@ -2684,17 +2684,6 @@ function SimulationApp() {
             active={voyagerMode}
             setActive={setVoyagerMode}
             onSelect={select}
-          />
-        )}
-        {panel === "voyager" && (
-          <VoyagerPanel
-            story={voyagerStory["voyager-1-journey"]}
-            engine={engine}
-            progress={voyagerProgress}
-            setProgress={setVoyagerProgress}
-            active={voyagerMode}
-            setActive={setVoyagerMode}
-            onSelect={select}
             deepTimeTarget={deepTimeTarget}
             setDeepTimeTarget={setDeepTimeTarget}
             act={act}
