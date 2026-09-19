@@ -8,7 +8,7 @@ import PhysicsEngine, {
   isStar,
 } from "./physics/PhysicsEngine.js";
 import { CHAPTERS, initializeChapter } from "./physics/story.js";
-import voyagerStory from "./data/stories.json" with { type: "json" };
+import voyagerStory from "./data/stories.json";
 import Voyager from "./scene/Voyager.jsx";
 import Universe from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
@@ -1939,6 +1939,10 @@ function SimulationApp() {
     [effects, setEffects] = useState([]),
     [samples, setSamples] = useState([]),
     [fps, setFps] = useState(0);
+  const isGodModeActive = panel === "god";
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+  const voyagerMission = voyagerStory["voyager-1-journey"];
   const [showSettings, setShowSettings] = useState(false),
     [showObjects, setShowObjects] = useState(true),
     [hint, setHint] = useState(() => {
@@ -1968,6 +1972,7 @@ function SimulationApp() {
   const selected = engine.getBody(selectedId),
     history = engine.getHistoryInfo();
   const onChange = useCallback(() => {
+    if (panelRef.current === "god") setEnduranceVisible(false);
     setSceneRevision((v) => v + 1);
     refresh((v) => v + 1);
   }, []);
@@ -2129,7 +2134,7 @@ function SimulationApp() {
         setEnduranceVisible(true);
         setEnduranceFocused(false);
       }
-      if (["bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula","deepTime"].includes(event.type) && panel === "god")
+      if (isGodModeActive && ["bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula","deepTime"].includes(event.type))
         setEnduranceVisible(false);
       if (["gravityChanged","bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula"].includes(event.type) && panel === "god")
         setEnduranceVisible(false);
@@ -2422,8 +2427,9 @@ function SimulationApp() {
           enduranceVisible={enduranceVisible}
           enduranceFocused={enduranceFocused}
           onEnduranceFocus={() => setEnduranceFocused(true)}
+          voyagerActive={voyagerMode}
+          voyagerProgress={voyagerProgress}
         />
-        <Voyager mission={voyagerStory["voyager-1-journey"]} active={voyagerMode} progress={voyagerProgress} />
       </RenderBoundary>
       <div className="vignette" />
       <header className="topbar">
