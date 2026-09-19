@@ -324,6 +324,14 @@ const NEBULA_BACKGROUNDS = [
     opacity: 0.24,
   },
   {
+    id: "pillars",
+    name: "Pillars of Creation",
+    url: "https://science.nasa.gov/wp-content/uploads/2022/10/STScI-01GA76K4QFQ6R3YQKQWJZJ2Q2T.png",
+    position: 0.50,
+    scale: 1.12,
+    opacity: 0.18,
+  },
+  {
     id: "ring",
     name: "Ring Nebula",
     url: "https://science.nasa.gov/wp-content/uploads/2025/07/ring-nebula.jpg",
