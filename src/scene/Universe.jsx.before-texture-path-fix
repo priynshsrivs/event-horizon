@@ -37,13 +37,8 @@ const TEXTURE_EXTENSIONS = {
 };
 
 function textureCandidates(name) {
-  const extensions =
-    TEXTURE_EXTENSIONS[name] || ["jpg", "jpeg", "png", "webp"];
-
-  return [
-    ...extensions.map((ext) => `/textures/${name}.${ext}`),
-    ...extensions.map((ext) => `/textures/nasa-presets/${name}.${ext}`),
-  ];
+  const extensions = TEXTURE_EXTENSIONS[name] || ["jpg", "jpeg", "png", "webp"];
+  return extensions.map((ext) => `/textures/${name}.${ext}`);
 }
 
 

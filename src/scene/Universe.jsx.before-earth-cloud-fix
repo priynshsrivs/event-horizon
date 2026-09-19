@@ -37,30 +37,9 @@ const TEXTURE_EXTENSIONS = {
 };
 
 function textureCandidates(name) {
-  const extensions =
-    TEXTURE_EXTENSIONS[name] || ["jpg", "jpeg", "png", "webp"];
-
-  return [
-    ...extensions.map((ext) => `/textures/${name}.${ext}`),
-    ...extensions.map((ext) => `/textures/nasa-presets/${name}.${ext}`),
-  ];
+  const extensions = TEXTURE_EXTENSIONS[name] || ["jpg", "jpeg", "png", "webp"];
+  return extensions.map((ext) => `/textures/${name}.${ext}`);
 }
-
-
-const NASA_BODY_TEXTURES = Object.freeze({
-  asteroid: "nasa-asteroid",
-  planet: "nasa-planet",
-  "rogue planet": "nasa-rogue-planet",
-  comet: "nasa-comet",
-  star: "nasa-star",
-  "red giant": "nasa-red-giant",
-  "red supergiant": "nasa-red-supergiant",
-  "white dwarf": "nasa-white-dwarf",
-  "brown dwarf": "nasa-brown-dwarf",
-  "neutron star": "nasa-neutron-star",
-  magnetar: "nasa-magnetar",
-  "dark matter halo": "nasa-dark-matter-halo",
-});
 
 function registerTextureStatus(name, status, extra = {}) {
   const registry = (window.__EVENT_HORIZON_TEXTURE_STATUS__ ||= {});
@@ -555,80 +534,20 @@ function EarthLayers({ radius, body, engine, settings }) {
       {clouds && (
         <mesh
           ref={cloudRef}
-          renderOrder={4}
+          renderOrder={3}
           rotation={[0, 0.02, 0]}
-          scale={[1.018, 1.018, 1.018]}
         >
-          <sphereGeometry
-            args={[
-              radius,
-              settings.quality === "medium" ? 48 : 64,
-              settings.quality === "medium" ? 32 : 48,
-            ]}
-          />
-
-          <shaderMaterial
+          <sphereGeometry args={[radius * 1.012, settings.quality === "medium" ? 40 : 56, settings.quality === "medium" ? 28 : 40]} />
+          <meshStandardMaterial
+            map={clouds}
+            alphaMap={clouds}
             transparent
-            depthTest={true}
+            opacity={0.34}
+            alphaTest={0.01}
+            depthTest={false}
             depthWrite={false}
+            roughness={1}
             side={THREE.FrontSide}
-            uniforms={{
-              cloudMap: { value: clouds },
-              cloudOpacity: {
-                value: settings.quality === "high" ? 0.78 : 0.62,
-              },
-            }}
-            vertexShader={`
-              varying vec2 vCloudUv;
-
-              void main() {
-                vCloudUv = uv;
-
-                gl_Position =
-                  projectionMatrix *
-                  modelViewMatrix *
-                  vec4(position, 1.0);
-              }
-            `}
-            fragmentShader={`
-              uniform sampler2D cloudMap;
-              uniform float cloudOpacity;
-
-              varying vec2 vCloudUv;
-
-              void main() {
-                float cloud = texture2D(
-                  cloudMap,
-                  vCloudUv
-                ).r;
-
-                /*
-                  NASA's cloud texture is a grayscale
-                  cloud-density map.
-
-                  Dark pixels = transparent.
-                  Bright pixels = visible cloud.
-                */
-                cloud = smoothstep(
-                  0.18,
-                  0.58,
-                  cloud
-                );
-
-                float alpha =
-                  cloud *
-                  cloudOpacity;
-
-                if (alpha < 0.025) discard;
-
-                gl_FragColor = vec4(
-                  0.96,
-                  0.985,
-                  1.0,
-                  alpha
-                );
-              }
-            `}
           />
         </mesh>
       )}
@@ -780,7 +699,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
     cometTail = useRef(),
     light = useRef();
   const [hover, setHover] = useState(false),
-    texture = useSafeTexture(body.metadata.texture || NASA_BODY_TEXTURES[body.type]);
+    texture = useSafeTexture(body.metadata.texture);
   const radius = visualRadius(body),
     star = isStar(body),
     color = body.metadata.color || "#8cb8c7";
@@ -921,7 +840,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
                   }
                   opacity={
                     body.type === "dark matter halo"
-                      ? 0.12
+                      ? 0.055
                       : body.type === "wormhole"
                         ? 0.12
                         : 1
