@@ -310,34 +310,30 @@ const NEBULA_BACKGROUNDS = [
   {
     id: "orion",
     name: "Orion Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2025/09/hubble-nebula-orion.jpg",
-    position: 0.34,
-    scale: 1.0,
-    opacity: 0.30,
+    url: "https://science.nasa.gov/wp-content/uploads/2023/09/hubble-nebula-orion.jpg",
+    opacity: 0.34,
+    rotation: [0.15, -0.35, 0],
   },
   {
     id: "carina",
     name: "Carina Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2025/07/carina-nebula-details.jpg",
-    position: 0.64,
-    scale: 1.08,
-    opacity: 0.24,
+    url: "https://science.nasa.gov/wp-content/uploads/2023/09/carina-nebula.jpg",
+    opacity: 0.27,
+    rotation: [-0.10, 0.55, 0],
   },
   {
     id: "pillars",
     name: "Pillars of Creation",
     url: "https://science.nasa.gov/wp-content/uploads/2022/10/STScI-01GA76K4QFQ6R3YQKQWJZJ2Q2T.png",
-    position: 0.50,
-    scale: 1.12,
-    opacity: 0.18,
+    opacity: 0.20,
+    rotation: [0.08, 0.18, 0],
   },
   {
     id: "ring",
     name: "Ring Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2025/07/ring-nebula.jpg",
-    position: 0.82,
-    scale: 0.9,
-    opacity: 0.22,
+    url: "https://science.nasa.gov/wp-content/uploads/2024/02/ring-nebula.jpg",
+    opacity: 0.24,
+    rotation: [0, -0.50, 0.08],
   },
 ];
 
@@ -424,19 +420,29 @@ function SpaceBackground({ settings, voyagerActive = false, nebulaId = null }) {
 
   return (
     <group>
-      {nebulaTexture && (
-        <mesh position={[0, 0, -900]} renderOrder={-100} frustumCulled={false}>
-          <planeGeometry args={[3000, 1800]} />
-          <meshBasicMaterial
-            map={nebulaTexture}
-            transparent
-            opacity={nebulaId ? 0.20 : 0}
-            depthWrite={false}
-            depthTest={false}
-            toneMapped={false}
-          />
-        </mesh>
-      )}
+      {nebulaTexture && (() => {
+        const config = NEBULA_BACKGROUNDS.find((item) => item.id === nebulaId);
+        return (
+          <mesh
+            position={[0, 0, 0]}
+            rotation={config?.rotation || [0, 0, 0]}
+            renderOrder={-100}
+            frustumCulled={false}
+            scale={950}
+          >
+            <sphereGeometry args={[1, 64, 32]} />
+            <meshBasicMaterial
+              map={nebulaTexture}
+              side={THREE.BackSide}
+              transparent
+              opacity={config?.opacity ?? 0.22}
+              depthWrite={false}
+              depthTest={false}
+              toneMapped={false}
+            />
+          </mesh>
+        );
+      })()}
       <AnimatedStarLayer
         count={Math.floor(density * 0.5)}
         radius={245}
