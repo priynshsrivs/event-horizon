@@ -8,6 +8,8 @@ import PhysicsEngine, {
   isStar,
 } from "./physics/PhysicsEngine.js";
 import { CHAPTERS, initializeChapter } from "./physics/story.js";
+import voyagerStory from "./data/stories.json" with { type: "json" };
+import Voyager from "./scene/Voyager.jsx";
 import Universe from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
@@ -43,6 +45,8 @@ const eventLabels = {
   wormholeTransit: "Wormhole transit",
   magnetarDisruption: "Magnetic interaction",
   branchRestored: "Timeline restored",
+  planetaryNebula: "Planetary nebula formed",
+  deepTime: "Deep-time evolution",
   rocheLimitBreach: "Roche limit breached",
 };
 const EXOTIC_TYPES = [
@@ -597,6 +601,50 @@ function BodyEditor({ body, engine, onChange, notify }) {
         Apply properties
       </button>
     </form>
+  );
+}
+
+function VoyagerPanel({ story, engine, progress, setProgress, active, setActive, onSelect }) {
+  const waypointCount = story.waypoints.length;
+  const idx = Math.min(waypointCount - 1, Math.floor(progress * waypointCount));
+  const waypoint = story.waypoints[idx];
+  const startYear = story.waypoints[0].year;
+  const endYear = story.waypoints.at(-1).year;
+  const missionYear = startYear + (endYear - startYear) * progress;
+  const speed = active ? 17 + 2.5 * Math.sin(progress * Math.PI * 2) : 17;
+  const voyager = engine.getBody("voyager-1");
+  if (voyager) onSelect?.("voyager-1");
+  return (
+    <aside className="panel voyager-panel">
+      <PanelHeading eyebrow="MISSION STORY" title="Voyager's Journey" icon="story" onClose={() => setActive(false)} />
+      <p className="panel-intro">{story.description}</p>
+      <div className="notice"><i />NASA mission milestones · 1977 → present</div>
+      <section className="panel-section">
+        <div className="button-row">
+          <button className="button warm" onClick={() => {
+            setActive(!active);
+            if (!engine.getBody("voyager-1")) engine.spawnBody("asteroid", {
+              id:"voyager-1", name:"Voyager 1", mass:1e-10, radius:1e-9,
+              position:[0,0,0], velocity:[3.7,0,0], collisionMode:"ignore",
+              metadata:{ visualSize:0.2, color:"#b8d9d6", voyagerMission:true }
+            });
+            onSelect?.("voyager-1");
+          }}>{active ? "Pause mission" : "Start mission"}</button>
+        </div>
+        <label className="range-label">MISSION TIMELINE <output>{Math.round(missionYear)}</output>
+          <input type="range" min="0" max="1" step="0.001" value={progress} onChange={e=>setProgress(+e.target.value)} />
+        </label>
+      </section>
+      <section className="panel-section">
+        <h3>{waypoint.label}</h3>
+        <p className="fine-print">{waypoint.highlight || "Mission launch and orbital insertion."}</p>
+        <dl className="data-rows">
+          <Metric label="Mission elapsed" value={fmt(missionYear - startYear, 1)} unit="yr" />
+          <Metric label="Velocity" value={fmt(speed, 1)} unit="km/s" />
+          <Metric label="Distance from Earth" value={fmt(story.display.presentDistanceAU * progress, 1)} unit="AU" />
+        </dl>
+      </section>
+    </aside>
   );
 }
 
@@ -1901,6 +1949,11 @@ function SimulationApp() {
     });
   const [chapter, setChapter] = useState(0),
     [storyProgress, setStoryProgress] = useState(0),
+    [voyagerMode, setVoyagerMode] = useState(false),
+    [voyagerProgress, setVoyagerProgress] = useState(0),
+    [enduranceVisible, setEnduranceVisible] = useState(true),
+    [enduranceFocused, setEnduranceFocused] = useState(false),
+    [deepTimeTarget, setDeepTimeTarget] = useState(0),
     [seeking, setSeeking] = useState(false),
     [showShortcuts, setShowShortcuts] = useState(false);
   const storySaved = useRef(null),
@@ -2070,7 +2123,13 @@ function SimulationApp() {
         )
       )
         setSceneRevision((v) => v + 1);
-      if (event.type === "simulationReset") setEffects([]);
+      if (event.type === "simulationReset") {
+        setEffects([]);
+        setEnduranceVisible(true);
+        setEnduranceFocused(false);
+      }
+      if (["gravityChanged","bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula"].includes(event.type) && panel === "god")
+        setEnduranceVisible(false);
       const label = eventLabels[event.type];
       if (label) {
         const message = `${label}${event.star?.name || event.body?.name || event.name ? ` · ${event.star?.name || event.body?.name || event.name}` : ""}`;
@@ -2357,6 +2416,7 @@ function SimulationApp() {
           }
           storyMode={panel === "story"}
         />
+        <Voyager mission={voyagerStory["voyager-1-journey"]} active={voyagerMode} progress={voyagerProgress} />
       </RenderBoundary>
       <div className="vignette" />
       <header className="topbar">
@@ -2512,6 +2572,7 @@ function SimulationApp() {
           ["story", "story", "Story"],
           ["whatif", "branch", "What if"],
           ["physics", "physics", "Physics"],
+          ["voyager", "story", "Voyager"],
         ].map(([key, icon, label]) => (
           <button
             className={panel === key ? "active" : ""}
@@ -2539,6 +2600,17 @@ function SimulationApp() {
             onChange={onChange}
             act={act}
             notify={notify}
+            onSelect={select}
+          />
+        )}
+        {panel === "voyager" && (
+          <VoyagerPanel
+            story={voyagerStory["voyager-1-journey"]}
+            engine={engine}
+            progress={voyagerProgress}
+            setProgress={setVoyagerProgress}
+            active={voyagerMode}
+            setActive={setVoyagerMode}
             onSelect={select}
           />
         )}
