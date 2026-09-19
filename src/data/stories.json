@@ -1,0 +1,50 @@
+{
+  "voyager-1-journey": {
+    "title": "Voyager's Journey",
+    "era": "MISSION / 1977 → INTERSTELLAR",
+    "description": "A guided reconstruction of Voyager 1 from launch through Jupiter and Saturn flybys into interstellar space.",
+    "target": "voyager-1",
+    "waypoints": [
+      {
+        "year": 1977,
+        "label": "Earth Launch & Orbital Insertion",
+        "date": "1977-09-05",
+        "phase": "launch",
+        "cameraOffset": [0.7, 0.35, 1.2],
+        "speedMultiplier": 1
+      },
+      {
+        "year": 1979,
+        "label": "Jupiter Flyby",
+        "date": "1979-03-05",
+        "phase": "jupiter-flyby",
+        "cameraOffset": [1.7, 0.8, 2.6],
+        "speedMultiplier": 1.8,
+        "highlight": "Gravitational slingshot increased Voyager 1's heliocentric energy and bent its trajectory toward Saturn."
+      },
+      {
+        "year": 1980,
+        "label": "Saturn Flyby & Titan Diversion",
+        "date": "1980-11-12",
+        "phase": "saturn-flyby",
+        "cameraOffset": [1.9, 0.8, 3.1],
+        "speedMultiplier": 1.55,
+        "highlight": "The Saturn encounter and Titan targeting shaped Voyager 1's post-encounter departure trajectory."
+      },
+      {
+        "year": 2012,
+        "label": "Heliopause / Interstellar Space",
+        "date": "2012-08-25",
+        "phase": "interstellar",
+        "cameraOffset": [3.4, 1.4, 5.5],
+        "speedMultiplier": 0.95,
+        "highlight": "Voyager 1 crossed into interstellar space in August 2012."
+      }
+    ],
+    "display": {
+      "initialDistanceAU": 0,
+      "presentDistanceAU": 165,
+      "presentVelocityKMS": 17.0
+    }
+  }
+}
