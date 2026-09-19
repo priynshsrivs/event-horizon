@@ -13,7 +13,7 @@ import CinematicParticles from "../cinematic/components/CinematicParticles.jsx";
 import CinematicShockwave from "../cinematic/components/CinematicShockwave.jsx";
 import CinematicWormhole from "../cinematic/components/CinematicWormhole.jsx";
 import CinematicAtmosphere from "../cinematic/components/CinematicAtmosphere.jsx";
-import Endurance from "./Endurance.jsx";
+import Endurance, { TarsPreview } from "./Endurance.jsx";
 import {
   Vector3,
   CelestialBody,
@@ -2176,6 +2176,20 @@ function ScreenCinematicFX({ effects, settings }) {
 }
 
 function Scene({
+  enduranceVisible = true,
+  onEnduranceFocus,
+  enduranceFocused = false,
+  ...sceneProps
+}) {
+  return (
+    <>
+      <Endurance visible={enduranceVisible} onFocus={onEnduranceFocus} />
+      {sceneProps.children}
+    </>
+  );
+}
+
+function SceneLegacy(props) {
   engine,
   selectedId,
   onSelect,
