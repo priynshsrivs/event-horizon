@@ -1,0 +1,39 @@
+.endurance-card {
+  position: fixed;
+  top: 18vh;
+  right: 26px;
+  width: min(360px, calc(100vw - 52px));
+  z-index: 80;
+  padding: 18px;
+  border: 1px solid rgba(180, 225, 220, .18);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(14, 24, 31, .78), rgba(7, 13, 19, .58));
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .38);
+  color: #e8f2f1;
+}
+.endurance-card h3 { margin: 4px 0 8px; letter-spacing: .12em; font-size: 16px; }
+.endurance-card p { margin: 0 0 14px; color: rgba(232,242,241,.72); line-height: 1.5; font-size: 13px; }
+.tars-preview { height: 170px; border-radius: 12px; display: grid; place-items: center; background: radial-gradient(circle, rgba(124,177,174,.13), transparent 60%); }
+.endurance-close { position: absolute; top: 10px; right: 10px; }
+.endurance-label { white-space: nowrap; font: 10px/1.2 "IBM Plex Mono", monospace; letter-spacing: .12em; color: rgba(205,236,232,.78); }
+.voyager-hud {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 75;
+  min-width: 260px;
+  padding: 14px 16px;
+  border: 1px solid rgba(168, 219, 214, .16);
+  border-radius: 14px;
+  background: rgba(7, 14, 20, .7);
+  backdrop-filter: blur(14px);
+  color: #eaf7f5;
+  pointer-events: none;
+}
+.voyager-hud .eyebrow { font: 10px "IBM Plex Mono", monospace; letter-spacing: .14em; color: #8bc0bc; }
+.voyager-hud .mission-title { font-size: 15px; margin: 6px 0 10px; }
+.voyager-hud .hud-grid { display:grid; grid-template-columns: repeat(3, minmax(72px,1fr)); gap:8px; }
+.voyager-hud strong { display:block; font: 14px "IBM Plex Mono", monospace; }
+.voyager-hud span { color: rgba(232,247,245,.55); font-size: 9px; letter-spacing:.08em; }
+.voyager-stage { margin-top: 10px; font-size: 10px; color: rgba(232,247,245,.7); }
