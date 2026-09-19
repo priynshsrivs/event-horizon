@@ -2352,6 +2352,7 @@ function SimulationApp() {
     return () => window.removeEventListener("keydown", key);
   }, [cancelStorySeek, engine, onChange, seeking, seekHistoryBy]);
 
+  const deepTimeProgress = Math.max(0, Math.min(1, deepTimeTarget / 5e9));
   const activeEffect = effects.at(-1);
   const speedBand =
     engine.timeScale < 0
@@ -2474,7 +2475,21 @@ function SimulationApp() {
           }}
         />
       )}
-      <div className="observation">
+      {voyagerMode && <div className="voyager-hud">
+        <div className="eyebrow">VOYAGER 1 · MISSION HUD</div>
+        <div className="mission-title">{voyagerStory["voyager-1-journey"].waypoints[Math.min(3, Math.floor(voyagerProgress * 4))].label}</div>
+        <div className="hud-grid">
+          <div><strong>{(1977 + (2012 - 1977) * voyagerProgress).toFixed(0)}</strong><span>MISSION YEAR</span></div>
+          <div><strong>17.0</strong><span>KM/S</span></div>
+          <div><strong>{(165 * voyagerProgress).toFixed(1)}</strong><span>AU FROM EARTH</span></div>
+        </div>
+      </div>}
+      {deepTimeTarget > 0 && <div className="voyager-hud" style={{left:24,bottom:190}}>
+        <div className="eyebrow">DEEP TIME</div>
+        <div className="mission-title">{(deepTimeTarget / 1e9).toFixed(2)} BILLION YEARS</div>
+        <div className="hud-grid"><div><strong>{deepTimeProgress >= 0.76 ? "RGB" : "MAIN"}</strong><span>STELLAR PHASE</span></div><div><strong>200</strong><span>R☉ MAX</span></div><div><strong>3000</strong><span>K TARGET</span></div></div>
+      </div>}
+            <div className="observation">
         <span className="eyebrow">
           OBSERVATORY / {storyRef.current.active ? "ORIGINS" : "SOL SYSTEM"}
         </span>
