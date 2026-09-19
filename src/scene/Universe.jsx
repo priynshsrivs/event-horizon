@@ -1587,8 +1587,13 @@ function Effect({ effect, engine, compressed, settings }) {
   const ref = useRef(),
     light = useRef(),
     particles = useRef(),
+    core = useRef(),
+    shell = useRef(),
+    shell2 = useRef(),
+    shockwave = useRef(),
     materials = useRef([]),
     started = useRef(performance.now());
+
   const reduced = usePrefersReducedMotion();
   const flare = effect.type === "solarFlare",
     nova = effect.type === "supernova",
@@ -1601,12 +1606,11 @@ function Effect({ effect, engine, compressed, settings }) {
     if (nova) {
       return {
         color: "#fff1cf",
-        durationMs: 1500,
-        intensity: 1.35,
-        scale: 2.4,
+        durationMs: 2900,
+        intensity: 1.7,
+        scale: 3.2,
       };
     }
-
     if (tidal) {
       return {
         color: "#a88cff",
@@ -1615,7 +1619,6 @@ function Effect({ effect, engine, compressed, settings }) {
         scale: 1.55,
       };
     }
-
     if (flare) {
       return {
         color: "#ffd18a",
@@ -1624,7 +1627,6 @@ function Effect({ effect, engine, compressed, settings }) {
         scale: 0.95,
       };
     }
-
     if (impactWave) {
       return {
         color: "#a9e7ef",
@@ -1633,7 +1635,6 @@ function Effect({ effect, engine, compressed, settings }) {
         scale: 1.35,
       };
     }
-
     if (collision) {
       return {
         color: "#d9f7ff",
@@ -1642,10 +1643,30 @@ function Effect({ effect, engine, compressed, settings }) {
         scale: 0.9,
       };
     }
-
     return null;
   })();
-  const particlePositions = useMemo(() => new Float32Array(64 * 3), []);
+
+  const PARTICLE_COUNT = nova ? 160 : 64;
+  const particlePositions = useMemo(
+    () => new Float32Array(PARTICLE_COUNT * 3),
+    [PARTICLE_COUNT],
+  );
+  const particleDirections = useMemo(
+    () =>
+      Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+        const u = (i + 0.5) / PARTICLE_COUNT;
+        const z = 1 - 2 * u;
+        const angle = i * 2.399963229728653;
+        const s = Math.sqrt(Math.max(0, 1 - z * z));
+        return new THREE.Vector3(
+          s * Math.cos(angle),
+          z,
+          s * Math.sin(angle),
+        );
+      }),
+    [PARTICLE_COUNT],
+  );
+
   const strands = useMemo(
     () =>
       Array.from({ length: 4 }, (_, i) => {
@@ -1662,43 +1683,130 @@ function Effect({ effect, engine, compressed, settings }) {
       }),
     [radius],
   );
+
   useFrame(() => {
     if (!ref.current) return;
-    const age = (performance.now() - started.current) / 1000,
-      duration = flare ? 5 : nova ? 7 : 3,
-      t = reduced ? 1 : age / duration;
-    const star = engine.getBody(effect.bodyId),
-      position = star
-        ? mapPosition(star.position, compressed)
-        : mapPosition(effect.position, compressed);
+
+    const age = (performance.now() - started.current) / 1000;
+    const duration = flare ? 5 : nova ? 3.15 : 3;
+    const t = reduced ? 1 : THREE.MathUtils.clamp(age / duration, 0, 1);
+
+    const star = engine.getBody(effect.bodyId);
+    const position = star
+      ? mapPosition(star.position, compressed)
+      : mapPosition(effect.position, compressed);
+
     ref.current.position.set(...position);
-    ref.current.visible = t <= 1;
-    ref.current.scale.setScalar(
-      flare
-        ? 1 + Math.sin(Math.min(t, 1) * Math.PI) * 0.4
-        : 0.1 + t * (nova ? 12 : 3),
-    );
-    materials.current.forEach((m, i) => {
-      if (m) m.opacity = Math.max(0, 1 - t) * (i === 1 ? 0.12 : 0.8);
-    });
-    if (particles.current && settings.quality !== "low") {
-      const positions = particles.current.geometry.attributes.position;
-      for (let i = 0; i < 64; i++) {
-        const z = 1 - (2 * (i + 0.5)) / 64,
-          angle = i * 2.399963,
-          r = radius * (1.1 + t * (flare ? 3 : 2)) * (0.7 + (i % 7) / 10);
-        positions.setXYZ(
-          i,
-          Math.sqrt(1 - z * z) * Math.cos(angle) * r,
-          z * r,
-          Math.sqrt(1 - z * z) * Math.sin(angle) * r,
-        );
+    ref.current.visible = age <= duration;
+
+    if (nova) {
+      // Three-stage supernova: violent stellar swelling -> collapse/flash -> expanding ejecta.
+      const growth = THREE.MathUtils.smootherstep(t, 0.02, 0.48);
+      const burst = THREE.MathUtils.smootherstep(t, 0.40, 0.68);
+      const expansion = THREE.MathUtils.smootherstep(t, 0.50, 1);
+      const fade = 1 - THREE.MathUtils.smoothstep(t, 0.68, 1);
+
+      const swollen = THREE.MathUtils.lerp(0.75, 7.5, growth);
+      const collapse = THREE.MathUtils.lerp(7.5, 0.22, burst);
+      const coreScale = t < 0.48 ? swollen : collapse;
+
+      if (core.current) {
+        core.current.scale.setScalar(coreScale);
+        core.current.rotation.x += 0.035;
+        core.current.rotation.y += 0.052;
+        core.current.rotation.z += 0.021;
       }
-      positions.needsUpdate = true;
+
+      if (shell.current) {
+        const s = THREE.MathUtils.lerp(0.5, 1 + expansion * 13, expansion);
+        shell.current.scale.setScalar(s);
+        shell.current.rotation.y += 0.008;
+        shell.current.rotation.z -= 0.005;
+      }
+
+      if (shell2.current) {
+        const s = THREE.MathUtils.lerp(0.25, 1 + expansion * 9, expansion);
+        shell2.current.scale.setScalar(s);
+        shell2.current.rotation.x -= 0.006;
+      }
+
+      if (shockwave.current) {
+        shockwave.current.scale.setScalar(
+          THREE.MathUtils.lerp(0.08, 1 + expansion * 18, expansion),
+        );
+        shockwave.current.material.opacity =
+          Math.sin(Math.min(1, expansion) * Math.PI) * 0.8 * fade;
+      }
+
+      if (particles.current && settings.quality !== "low") {
+        const positions = particles.current.geometry.attributes.position;
+        const travel = THREE.MathUtils.lerp(0.2, 16, expansion);
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const d = particleDirections[i];
+          const turbulence =
+            1 +
+            Math.sin(i * 4.7 + age * 8) * 0.08 +
+            Math.sin(i * 1.91 + age * 13) * 0.04;
+          const dist =
+            radius *
+            travel *
+            turbulence *
+            (0.55 + ((i * 17) % 23) / 23);
+          positions.setXYZ(
+            i,
+            d.x * dist,
+            d.y * dist,
+            d.z * dist,
+          );
+        }
+        positions.needsUpdate = true;
+      }
+
+      if (materials.current[0])
+        materials.current[0].opacity =
+          Math.max(0, 1 - expansion * 0.75) * (0.55 + burst * 0.45);
+      if (materials.current[1])
+        materials.current[1].opacity = 0.08 + burst * 0.42 + expansion * 0.05;
+      if (materials.current[6])
+        materials.current[6].opacity = Math.max(0, expansion * fade) * 0.95;
+
+      if (light.current) {
+        const flash = Math.pow(Math.max(0, 1 - t / 0.72), 2);
+        light.current.intensity =
+          3 + flash * 95 + expansion * 5 * fade;
+      }
+    } else {
+      ref.current.scale.setScalar(
+        flare
+          ? 1 + Math.sin(Math.min(t, 1) * Math.PI) * 0.4
+          : 0.1 + t * 3,
+      );
+
+      materials.current.forEach((m, i) => {
+        if (m) m.opacity = Math.max(0, 1 - t) * (i === 1 ? 0.12 : 0.8);
+      });
+
+      if (particles.current && settings.quality !== "low") {
+        const positions = particles.current.geometry.attributes.position;
+        for (let i = 0; i < 64; i++) {
+          const z = 1 - (2 * (i + 0.5)) / 64,
+            angle = i * 2.399963,
+            r = radius * (1.1 + t * (flare ? 3 : 2)) * (0.7 + (i % 7) / 10);
+          positions.setXYZ(
+            i,
+            Math.sqrt(1 - z * z) * Math.cos(angle) * r,
+            z * r,
+            Math.sqrt(1 - z * z) * Math.sin(angle) * r,
+          );
+        }
+        positions.needsUpdate = true;
+      }
+
+      if (light.current)
+        light.current.intensity = Math.max(0, (1 - t) * 7);
     }
-    if (light.current)
-      light.current.intensity = Math.max(0, (1 - t) * (nova ? 30 : 7));
   });
+
   return (
     <group ref={ref}>
       {cinematicShockwave && !reduced && (
@@ -1711,7 +1819,68 @@ function Effect({ effect, engine, compressed, settings }) {
         />
       )}
 
-      {flare ? (
+      {nova ? (
+        <>
+          <mesh ref={core}>
+            <icosahedronGeometry args={[radius * 0.58, 4]} />
+            <meshBasicMaterial
+              color="#fff7dc"
+              transparent
+              opacity={0.98}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+
+          <mesh ref={shell} scale={0.01}>
+            <sphereGeometry args={[radius * 0.72, 32, 24]} />
+            <meshBasicMaterial
+              ref={(m) => (materials.current[0] = m)}
+              color="#ff9d55"
+              transparent
+              opacity={0.7}
+              depthWrite={false}
+              side={THREE.BackSide}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+
+          <mesh ref={shell2} scale={0.01}>
+            <sphereGeometry args={[radius * 1.05, 28, 20]} />
+            <meshBasicMaterial
+              color="#ffdf9a"
+              transparent
+              opacity={0.3}
+              depthWrite={false}
+              side={THREE.DoubleSide}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+
+          <mesh ref={shockwave}>
+            <sphereGeometry args={[radius * 0.9, 32, 20]} />
+            <meshBasicMaterial
+              color="#ffe5b8"
+              transparent
+              opacity={0}
+              depthWrite={false}
+              side={THREE.BackSide}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+
+          <mesh rotation={[-Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[radius * 1.5, radius * 0.045, 8, 96]} />
+            <meshBasicMaterial
+              color="#fff0ca"
+              transparent
+              opacity={0.7}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </mesh>
+        </>
+      ) : flare ? (
         <group rotation={effect.rotation || [0, 0, 0]}>
           {strands.map((points, i) => (
             <Line
@@ -1731,24 +1900,28 @@ function Effect({ effect, engine, compressed, settings }) {
           <torusGeometry args={[radius * 2, radius * 0.035, 8, 96]} />
           <meshBasicMaterial
             ref={(m) => (materials.current[0] = m)}
-            color={nova ? "#ffd3ad" : "#ed9862"}
+            color="#ed9862"
             transparent
             depthWrite={false}
             blending={THREE.AdditiveBlending}
           />
         </mesh>
       )}
-      <mesh>
-        <sphereGeometry args={[radius * (flare ? 1.5 : 2), 24, 16]} />
-        <meshBasicMaterial
-          ref={(m) => (materials.current[1] = m)}
-          color="#ffd9a3"
-          transparent
-          opacity={0.08}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
+
+      {!nova && (
+        <mesh>
+          <sphereGeometry args={[radius * 2, 24, 16]} />
+          <meshBasicMaterial
+            ref={(m) => (materials.current[1] = m)}
+            color="#ffd9a3"
+            transparent
+            opacity={0.08}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+
       {settings.quality !== "low" && (
         <points ref={particles}>
           <bufferGeometry>
@@ -1759,8 +1932,8 @@ function Effect({ effect, engine, compressed, settings }) {
           </bufferGeometry>
           <pointsMaterial
             ref={(m) => (materials.current[6] = m)}
-            color="#ffcc8b"
-            size={radius * 0.05}
+            color={nova ? "#ffd8a1" : "#ffcc8b"}
+            size={radius * (nova ? 0.045 : 0.05)}
             sizeAttenuation
             transparent
             opacity={0.8}
@@ -1769,7 +1942,12 @@ function Effect({ effect, engine, compressed, settings }) {
           />
         </points>
       )}
-      <pointLight ref={light} color="#ffc59a" distance={nova ? 30 : 5} />
+
+      <pointLight
+        ref={light}
+        color={nova ? "#fff0c4" : "#ffc59a"}
+        distance={nova ? 45 : 5}
+      />
     </group>
   );
 }
