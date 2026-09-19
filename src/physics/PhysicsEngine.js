@@ -1328,7 +1328,7 @@ export class PhysicsEngine {
     const star = this.getBody(id);
     if (!star || !isStar(star)) return null;
     const initialMass = star.mass;
-    const retained = clamp(initialMass, 0.54, 0.6);
+    const retained = initialMass < 0.54 ? initialMass * 0.9 : clamp(initialMass, 0.54, 0.6);
     const remnantPosition = star.position.clone();
     const remnantVelocity = star.velocity.clone();
     const removedMass = Math.max(0, initialMass - retained);
@@ -1359,7 +1359,7 @@ export class PhysicsEngine {
       const radialVelocity = radial.clone().multiplyScalar(velocity.dot(radial));
       const tangentialVelocity = velocity.clone().sub(radialVelocity);
       body.position.copy(remnant.position).addScaledVector(radiusVector, scale);
-      body.velocity.copy(remnant.velocity).addScaledVector(radialVelocity, 1).addScaledVector(tangentialVelocity, Math.sqrt(retained / initialMass));
+      body.velocity.copy(remnant.velocity).addScaledVector(radialVelocity, 1).addScaledVector(tangentialVelocity, retained / initialMass);
       body.metadata.orbitAdjustedForStellarMassLoss = true;
     }
     const shellSource = star.clone();
@@ -1410,7 +1410,8 @@ export class PhysicsEngine {
         if (destroyEngulfed) {
           for (const body of [...this.bodies]) {
             if (body === star || body.type === "debris" || body.type === "asteroid" || !body.enabled) continue;
-            if (body.position.distanceTo(star.position) <= star.radius) {
+            const engulfmentRadius = target >= 5e9 ? Math.max(star.radius, 1.01) : star.radius;
+            if (body.position.distanceTo(star.position) <= engulfmentRadius) {
               this.removeBody(body.id);
               changes.push({ destroyed: body.id, star: star.id });
             }
