@@ -310,7 +310,7 @@ const NEBULA_BACKGROUNDS = [
   {
     id: "orion",
     name: "Orion Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2023/06/orion-nebula.jpg",
+    url: "https://science.nasa.gov/wp-content/uploads/2025/09/hubble-nebula-orion.jpg",
     position: 0.34,
     scale: 1.0,
     opacity: 0.30,
@@ -318,7 +318,7 @@ const NEBULA_BACKGROUNDS = [
   {
     id: "carina",
     name: "Carina Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2023/06/carina-nebula.jpg",
+    url: "https://science.nasa.gov/wp-content/uploads/2025/07/carina-nebula-details.jpg",
     position: 0.64,
     scale: 1.08,
     opacity: 0.24,
@@ -326,48 +326,12 @@ const NEBULA_BACKGROUNDS = [
   {
     id: "ring",
     name: "Ring Nebula",
-    url: "https://science.nasa.gov/wp-content/uploads/2024/02/ring-nebula.jpg",
+    url: "https://science.nasa.gov/wp-content/uploads/2025/07/ring-nebula.jpg",
     position: 0.82,
     scale: 0.9,
     opacity: 0.22,
   },
 ];
-
-function NebulaBackground({ id = null }) {
-  const config = NEBULA_BACKGROUNDS.find((item) => item.id === id);
-  const texture = useSafeTexture(
-    config?.id ? `nebula:${config.id}` : null,
-  );
-  const { scene } = useThree();
-  const group = useRef();
-
-  useEffect(() => {
-    if (!config || !texture || !group.current) return;
-    const material = group.current.material;
-    material.map = texture;
-    material.needsUpdate = true;
-  }, [config, texture]);
-
-  if (!config) return null;
-
-  return (
-    <mesh
-      ref={group}
-      position={[0, 0, -1800]}
-      renderOrder={-100}
-      frustumCulled={false}
-    >
-      <planeGeometry args={[3200, 1900]} />
-      <meshBasicMaterial
-        transparent
-        opacity={config.opacity}
-        depthWrite={false}
-        depthTest={false}
-        toneMapped={false}
-      />
-    </mesh>
-  );
-}
 
 function SpaceBackground({ settings, voyagerActive = false, nebulaId = null }) {
   const galaxy = useSafeTexture("galaxy");
