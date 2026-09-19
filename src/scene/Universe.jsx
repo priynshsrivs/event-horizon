@@ -741,7 +741,7 @@ function EarthLayers({ radius, body, engine, settings }) {
 
 function BlackHoleVisual({ body, radius, settings, engine }) {
   const group = useRef();
-  const [videoReady, setVideoReady] = useState(false);
+  const [videoFailed, setVideoFailed] = useState(false);
 
   const blackHoleVideo = useMemo(() => {
     if (typeof document === "undefined") return null;
@@ -757,18 +757,10 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
     video.setAttribute("webkit-playsinline", "");
     video.setAttribute("disablePictureInPicture", "");
 
-    // Prefer NASA's H.264 MP4 for Safari/macOS compatibility.
-    // Keep WebM as the fallback for browsers that prefer it.
-    const mp4 = document.createElement("source");
-    mp4.src = "/textures/nasa-blackhole-360.mp4";
-    mp4.type = "video/mp4";
-
-    const webm = document.createElement("source");
-    webm.src = "/textures/nasa-blackhole-360.webm";
-    webm.type = "video/webm";
-
-    video.appendChild(mp4);
-    video.appendChild(webm);
+    // NASA's square 1080p 360° render is much lighter than the
+    // 3840×3840 continuous master and is more reliable for Safari
+    // VideoTexture playback.
+    video.src = "/textures/nasa-blackhole-360-1080.mp4";
 
     return video;
   }, []);
@@ -803,17 +795,17 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
 
     const ready = () => {
       if (!alive) return;
-      setVideoReady(true);
       start();
     };
 
     const failed = () => {
       if (!alive) return;
-      setVideoReady(false);
+      setVideoFailed(true);
     };
 
     blackHoleVideo.addEventListener("loadeddata", ready);
     blackHoleVideo.addEventListener("canplay", ready);
+    blackHoleVideo.addEventListener("playing", ready);
     blackHoleVideo.addEventListener("error", failed);
     blackHoleVideo.load();
     start();
@@ -823,6 +815,7 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
       blackHoleVideo.pause();
       blackHoleVideo.removeEventListener("loadeddata", ready);
       blackHoleVideo.removeEventListener("canplay", ready);
+      blackHoleVideo.removeEventListener("playing", ready);
       blackHoleVideo.removeEventListener("error", failed);
       blackHoleTexture?.dispose();
       blackHoleVideo.removeAttribute("src");
@@ -839,8 +832,19 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
     return () => window.removeEventListener("pointerdown", resume);
   }, [blackHoleVideo]);
 
+  useFrame(() => {
+    if (
+      blackHoleVideo &&
+      !videoFailed &&
+      blackHoleVideo.readyState >= 2 &&
+      blackHoleVideo.paused
+    ) {
+      blackHoleVideo.play().catch(() => {});
+    }
+  });
+
   const activeTexture =
-    videoReady && blackHoleTexture
+    !videoFailed && blackHoleTexture
       ? blackHoleTexture
       : fallbackTexture;
 
