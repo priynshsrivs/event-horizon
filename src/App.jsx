@@ -607,6 +607,37 @@ function BodyEditor({ body, engine, onChange, notify }) {
   );
 }
 
+const NEBULA_OPTIONS = [
+  { id: null, label: "None", description: "Use the normal observatory background." },
+  { id: "orion", label: "Orion Nebula", description: "NASA Hubble composite." },
+  { id: "carina", label: "Carina Nebula", description: "NASA Hubble / CTIO composite." },
+  { id: "ring", label: "Ring Nebula", description: "NASA Hubble close-up." },
+];
+
+function NebulaPanel({ active, onSelect, onClose }) {
+  return (
+    <aside className="panel nebula-panel">
+      <PanelHeading eyebrow="CINEMATIC BACKDROP" title="Nebula library" icon="physics" onClose={onClose} />
+      <p className="panel-intro">
+        Nebulae are rendered as distant background imagery only. They never sit
+        on top of planets, stars, or spacecraft.
+      </p>
+      <div className="panel-section">
+        {NEBULA_OPTIONS.map((item) => (
+          <button
+            key={item.id ?? "none"}
+            className={`button full ${active === item.id ? "active" : ""}`}
+            onClick={() => onSelect(item.id)}
+          >
+            {item.label}
+            <small>{item.description}</small>
+          </button>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function voyagerWaypointIndex(waypoints, missionYear) {
   if (!waypoints?.length) return 0;
   let index = 0;
@@ -1973,6 +2004,7 @@ function SimulationApp() {
     [storyProgress, setStoryProgress] = useState(0),
     [voyagerMode, setVoyagerMode] = useState(false),
     [voyagerProgress, setVoyagerProgress] = useState(0),
+    [nebulaId, setNebulaId] = useState(null),
     [enduranceVisible, setEnduranceVisible] = useState(true),
     [enduranceFocused, setEnduranceFocused] = useState(false),
     [deepTimeTarget, setDeepTimeTarget] = useState(0),
@@ -2139,6 +2171,8 @@ function SimulationApp() {
       setBuildOpen(false);
       if (name !== "story" && storyRef.current.active) closeStory();
       setPanel(name);
+      if (name !== "voyager") setVoyagerMode(false);
+      if (name !== "story") setNebulaId((current) => current);
       if (name === "god") engine.pause();
       if (name === "story" && !storyRef.current.active) {
         storySaved.current = {
@@ -2516,6 +2550,7 @@ function SimulationApp() {
           onEnduranceFocus={() => setEnduranceFocused(true)}
           voyagerActive={voyagerMode}
           voyagerProgress={voyagerProgress}
+          nebulaId={nebulaId}
         />
       </RenderBoundary>
       <div className="vignette" />
@@ -2701,6 +2736,7 @@ function SimulationApp() {
           ["whatif", "branch", "What if"],
           ["physics", "physics", "Physics"],
           ["voyager", "story", "Voyager"],
+          ["nebula", "physics", "Nebula"],
         ].map(([key, icon, label]) => (
           <button
             className={panel === key ? "active" : ""}
@@ -2729,6 +2765,13 @@ function SimulationApp() {
             act={act}
             notify={notify}
             onSelect={select}
+          />
+        )}
+        {panel === "nebula" && (
+          <NebulaPanel
+            active={nebulaId}
+            onSelect={setNebulaId}
+            onClose={() => setPanel(null)}
           />
         )}
         {panel === "voyager" && (
