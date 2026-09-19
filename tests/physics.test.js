@@ -216,6 +216,46 @@ test("supernova creates physical ejecta and compact remnant with conserved mass"
   close(momentum(e.bodies).distanceTo(p), 0, 1e-10);
 });
 
+test("Sun-mass supernova request becomes planetary nebula white dwarf", () => {
+  const e = quietEngine();
+  const sun = e.spawnBody("star", { id: "sun", name: "Sun", mass: 1 });
+  const planet = e.spawnBody("planet", {
+    id: "planet-under-test",
+    position: [1, 0, 0],
+    velocity: [0, 6.28, 0],
+    metadata: { primaryId: "sun" },
+  });
+  const remnant = e.triggerSupernova("sun");
+  assert.equal(remnant.type, "white dwarf");
+  assert.ok(remnant.mass >= 0.54 && remnant.mass <= 0.6);
+  assert.equal(remnant.metadata.planetaryNebula, true);
+  assert.ok(planet.metadata.orbitAdjustedForStellarMassLoss);
+});
+
+test("deep time evolves a one-solar-mass star into a red giant without corrupting physics", () => {
+  const e = quietEngine();
+  const sun = e.spawnBody("star", {
+    id: "sun",
+    name: "Sun",
+    mass: 1,
+    position: [0, 0, 0],
+    metadata: { initialMass: 1 },
+  });
+  const earth = e.spawnBody("planet", {
+    id: "earth",
+    position: [1, 0, 0],
+    velocity: [0, 6.28, 0],
+    metadata: { primaryId: "sun" },
+  });
+  e.fastForwardDeepTime(5e9);
+  assert.equal(e.time, 5e9);
+  assert.equal(sun.type, "red giant");
+  assert.ok(sun.radius / (696700000 / AU_M) >= 199);
+  assert.ok(sun.temperature <= 3000 + 1e-6);
+  assert.ok(sun.luminosity > 1000);
+  assert.equal(e.getBody("earth"), undefined);
+});
+
 test("history, branch, save/restore and trajectory prediction preserve vector types and live state", () => {
   const e = createSunEarthTestSystem(),
     saved = JSON.stringify(e.saveState());
