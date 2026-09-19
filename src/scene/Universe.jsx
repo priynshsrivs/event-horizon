@@ -1759,13 +1759,55 @@ function voyagerProgressTangent(progress = 0) {
   return new THREE.Vector3(...b).sub(new THREE.Vector3(...a)).normalize();
 }
 
-function voyagerCameraOffset(progress = 0) {
-  const tangent = voyagerProgressTangent(progress);
-  // Trail the spacecraft slightly while keeping a readable elevated angle.
-  return new THREE.Vector3(
-    -tangent.x * 2.2 + 2.4,
-    2.1 + Math.sin(progress * Math.PI) * 0.6,
-    -tangent.z * 2.2 + 5.4,
+function VoyagerJourneyContext({ progress = 0 }) {
+  const markers = [
+    { label: "EARTH", position: VOYAGER_DISPLAY_WAYPOINTS[0], size: 0.16, color: "#79b7d8" },
+    { label: "JUPITER", position: VOYAGER_DISPLAY_WAYPOINTS[1], size: 0.28, color: "#d6b98a" },
+    { label: "SATURN", position: VOYAGER_DISPLAY_WAYPOINTS[2], size: 0.24, color: "#d9caa5" },
+    { label: "INTERSTELLAR", position: VOYAGER_DISPLAY_WAYPOINTS[3], size: 0.14, color: "#9be5df" },
+  ];
+
+  return (
+    <group>
+      <Line
+        points={VOYAGER_DISPLAY_WAYPOINTS}
+        color="#83c9c7"
+        transparent
+        opacity={0.18}
+        lineWidth={1}
+        dashed
+        dashSize={0.18}
+        gapSize={0.14}
+      />
+      {markers.map((marker, index) => (
+        <group key={marker.label} position={marker.position}>
+          <mesh>
+            <sphereGeometry args={[marker.size, 20, 14]} />
+            <meshBasicMaterial
+              color={marker.color}
+              transparent
+              opacity={index === 3 ? 0.22 : 0.42}
+              depthWrite={false}
+            />
+          </mesh>
+          <Html
+            position={[marker.size * 1.8, marker.size * 1.8, 0]}
+            distanceFactor={9}
+            style={{
+              color: marker.color,
+              fontFamily: "IBM Plex Mono, monospace",
+              fontSize: "9px",
+              letterSpacing: "0.14em",
+              opacity: index === 3 ? 0.55 : 0.72,
+              pointerEvents: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {marker.label}
+          </Html>
+        </group>
+      ))}
+    </group>
   );
 }
 
@@ -2353,7 +2395,7 @@ function Scene({
 
       <ambientLight intensity={0.25} />
       <hemisphereLight args={["#acc3d9", "#1c1713", 0.42]} />
-      {settings.orbits &&
+      {!voyagerActive && settings.orbits &&
         bodies
           .filter((b) => b.type === "planet" || b.type === "moon")
           .map((body) => (
@@ -2365,10 +2407,10 @@ function Scene({
               revision={`${orbitRevision}-${sceneRevision}`}
             />
           ))}
-      {settings.habitable && (
+      {!voyagerActive && settings.habitable && (
         <HabitableZone engine={engine} compressed={settings.compressed} />
       )}
-      {bodies.map((body) => (
+      {!voyagerActive && bodies.map((body) => (
         body.id === "voyager-1" ? null : <PlanetBody
           key={body.id}
           body={body}
@@ -2379,6 +2421,7 @@ function Scene({
           building={!!buildTool}
         />
       ))}
+      {voyagerActive && <VoyagerJourneyContext progress={voyagerProgress} />}
       {voyagerActive && engine.getBody("voyager-1") && (
         <Voyager
           mission={voyagerStoryFallback}
@@ -2387,7 +2430,7 @@ function Scene({
           position={sampleVoyagerDisplayPosition(voyagerProgress)}
           selected={selectedId === "voyager-1"}
           visible
-          scale={1}
+          scale={0.72}
           onClick={(e) => { e.stopPropagation(); onSelect("voyager-1"); }}
         />
       )}
