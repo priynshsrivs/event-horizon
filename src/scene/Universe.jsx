@@ -325,7 +325,7 @@ const NEBULA_BACKGROUNDS = [
   {
     id: "pillars",
     name: "Pillars of Creation",
-    url: "https://assets.science.nasa.gov/dynamicimage/assets/science/missions/webb/outreach/migrated/2022/STScI-01GK2KMYS6HADS6ND8NRHG53RP.png?crop=faces%2Cfocalpoint&fit=clip&h=6675&w=7130",
+    url: "https://assets.science.nasa.gov/dynamicimage/assets/science/missions/webb/outreach/migrated/2022/STScI-01GK2KMYS6HADS6ND8NRHG53RP.png?crop=faces%2Cfocalpoint&fit=clip&h=1872&w=2000",
     opacity: 0.20,
     rotation: [0.08, 0.18, 0],
   },
