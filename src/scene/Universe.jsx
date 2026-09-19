@@ -2453,11 +2453,13 @@ function Scene({
       <Endurance visible={enduranceVisible} onFocus={onEnduranceFocus} />
             <SpaceBackground settings={settings} voyagerActive={voyagerActive} nebulaId={nebulaId} />
 
-      <CinematicParticles
-        quality={settings.quality}
-        radius={90}
-        reducedMotion={reducedMotion}
-      />
+      {!voyagerActive && (
+        <CinematicParticles
+          quality={settings.quality === "high" ? "medium" : "low"}
+          radius={80}
+          reducedMotion={reducedMotion}
+        />
+      )}
 
       <ambientLight intensity={0.25} />
       <hemisphereLight args={["#acc3d9", "#1c1713", 0.42]} />
@@ -2566,7 +2568,7 @@ function Scene({
         quality={settings.quality}
         intensity={cinematicIntensity}
         reducedMotion={reducedMotion}
-        enabled={!cameraInteracting}
+        enabled={!cameraInteracting && settings.quality === "high"}
       />
 
       {buildTool && (
