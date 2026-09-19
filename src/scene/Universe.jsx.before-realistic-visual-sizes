@@ -340,152 +340,8 @@ function SpaceBackground({ settings }) {
         color="#d4b98f"
         reduced={reduced}
       />
-      /* EH FAR-SCALE GALACTIC STAR FIELD */
-      <AnimatedStarLayer
-        count={Math.floor(density * 0.12)}
-        radius={1200}
-        size={0.28}
-        opacity={0.075}
-        speed={0.00055}
-        seed={314}
-        color="#8da9c9"
-        reduced={reduced}
-      />
-
       <CinematicDust settings={settings} reduced={reduced} />
     </group>
-  );
-}
-
-
-/* ============================================================
-   EVENT HORIZON — NASA MILKY WAY GALAXY SCALE
-   ============================================================ */
-
-function MilkyWayGalaxy({ settings }) {
-  const texture = useSafeTexture("galaxy");
-  const { camera } = useThree();
-
-  const galaxyFront = useRef();
-  const galaxyGlow = useRef();
-  const reduced = usePrefersReducedMotion();
-
-  useEffect(() => {
-    return () => {
-      if (typeof document !== "undefined") {
-        document.documentElement.style.removeProperty(
-          "--eh-solar-bg-opacity",
-        );
-      }
-    };
-  }, []);
-
-  useFrame(({ clock }) => {
-    if (!texture) return;
-
-    const distance = camera.position.length();
-
-    /*
-     * Keep the Milky Way completely hidden during normal
-     * solar-system viewing.
-     *
-     * It gradually appears as the camera leaves the
-     * solar-system scale.
-     */
-    const fade = THREE.MathUtils.smoothstep(
-      distance,
-      90,
-      820,
-    );
-
-    const qualityMultiplier =
-      settings.quality === "high"
-        ? 0.92
-        : settings.quality === "medium"
-          ? 0.82
-          : 0.70;
-
-    const pulse = reduced
-      ? 1
-      : 0.975 +
-        Math.sin(clock.elapsedTime * 0.075) * 0.025;
-
-    if (galaxyFront.current) {
-      galaxyFront.current.opacity =
-        fade * qualityMultiplier * pulse;
-    }
-
-    if (galaxyGlow.current) {
-      galaxyGlow.current.opacity =
-        fade * qualityMultiplier * 0.18 * pulse;
-    }
-
-    /*
-     * Fade the existing Solar System reference image away
-     * while the real Milky Way backdrop comes in.
-     */
-    if (typeof document !== "undefined") {
-      document.documentElement.style.setProperty(
-        "--eh-solar-bg-opacity",
-        String((0.48 * (1 - fade)).toFixed(3)),
-      );
-    }
-  });
-
-  if (!texture) return null;
-
-  return (
-    <Billboard
-      follow
-      lockX={false}
-      lockY={false}
-      lockZ={false}
-    >
-      {/* Soft outer halo */}
-      <mesh
-        position={[0, 0, -5]}
-        scale={[1.08, 1.08, 1]}
-        frustumCulled={false}
-        renderOrder={-30}
-      >
-        <planeGeometry args={[2, 2]} />
-        <meshBasicMaterial
-          ref={galaxyGlow}
-          map={texture}
-          transparent
-          opacity={0}
-          color="#91b8ff"
-          blending={THREE.AdditiveBlending}
-          side={THREE.DoubleSide}
-          depthTest={true}
-          depthWrite={false}
-          fog={false}
-          toneMapped={false}
-        />
-      </mesh>
-
-      {/* Main NASA Milky Way image */}
-      <mesh
-        position={[0, 0, -5]}
-        scale={[1.0, 1.0, 1]}
-        frustumCulled={false}
-        renderOrder={-20}
-      >
-        <planeGeometry args={[2, 2]} />
-        <meshBasicMaterial
-          ref={galaxyFront}
-          map={texture}
-          transparent
-          opacity={0}
-          blending={THREE.AdditiveBlending}
-          side={THREE.DoubleSide}
-          depthTest={true}
-          depthWrite={false}
-          fog={false}
-          toneMapped={false}
-        />
-      </mesh>
-    </Billboard>
   );
 }
 
@@ -842,17 +698,8 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
    * Schwarzschild radius used by the physics engine.
    */
 
-  /*
-   * Presentation-only footprint.
-   *
-   * The actual event horizon remains governed by
-   * body.mass / Schwarzschild radius in the physics engine.
-   *
-   * This larger visual footprint represents the
-   * accretion-disk / gravitational-lensing visualization.
-   */
-  const visualWidth = radius * 3.35;
-  const visualHeight = radius * 1.95;
+  const visualWidth = radius * 3.65;
+  const visualHeight = radius * 2.05;
 
   return (
     <group ref={group}>
@@ -885,7 +732,7 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
       <mesh>
         <sphereGeometry
           args={[
-            radius * 0.23,
+            radius * 0.30,
             64,
             48
           ]}
@@ -1253,27 +1100,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
       {star && (
         <>
           {settings.quality !== "low" && (
-            <Glow
-              color={color}
-              size={
-                body.id === "sun"
-                  ? radius * 0.72
-                  : body.type === "red supergiant"
-                    ? radius * 1.35
-                    : body.type === "red giant"
-                      ? radius * 1.45
-                      : radius * 1.25
-              }
-              opacity={
-                body.id === "sun"
-                  ? 0.075
-                  : body.type === "red supergiant"
-                    ? 0.14
-                    : body.type === "red giant"
-                      ? 0.16
-                      : 0.18
-              }
-            />
+            <Glow color={color} size={radius * 3.8} opacity={0.28} />
           )}
           {(body.id === "sun" ||
             engine.bodies.filter(isStar).indexOf(body) < 3) && (
@@ -1382,8 +1209,7 @@ function OrbitPath({ body, engine, compressed, revision }) {
       color={body.metadata.color || "#536472"}
       lineWidth={0.6}
       transparent
-      opacity={0.24}
-      renderOrder={12}
+      opacity={0.21}
     />
   ) : null;
 }
@@ -2136,7 +1962,6 @@ function Scene({
   const bodies = engine.getBodies();
   return (
     <>
-      <MilkyWayGalaxy settings={settings} />
       <SpaceBackground settings={settings} />
 
       <CinematicParticles
@@ -2213,10 +2038,9 @@ function Scene({
         makeDefault
         enableDamping
         dampingFactor={0.07}
-        maxDistance={2400}
+        maxDistance={200}
         enablePan
-        enableZoom
-        zoomSpeed={2.5}
+        zoomSpeed={0.8}
         rotateSpeed={0.6}
       />
       <CameraController
@@ -2258,7 +2082,7 @@ export default function Universe(props) {
       <Canvas
         className={props.buildTool ? "universe placing" : "universe"}
         style={{ touchAction: props.buildTool ? "none" : "auto" }}
-        camera={{ position: [13, 17, 21], fov: 43, near: 0.05, far: 6000 }}
+        camera={{ position: [13, 17, 21], fov: 43, near: 0.05, far: 600 }}
         dpr={
           props.settings.quality === "high"
             ? [1, 1.75]

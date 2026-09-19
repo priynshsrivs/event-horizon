@@ -147,5 +147,5 @@ export const visualRadius = (body) => {
   const rawSize = Number(body?.metadata?.visualSize);
   const size = Number.isFinite(rawSize) ? rawSize : 0.06;
 
-  return Math.min(10, Math.max(0.006, size * 1.65));
+  return Math.min(5, Math.max(0.012, size * 1.65));
 };

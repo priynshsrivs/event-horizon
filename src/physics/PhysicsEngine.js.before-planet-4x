@@ -247,27 +247,27 @@ export const BODY_PRESETS = {
     mass: 2e-14,
     radius: 1e-7,
     temperature: 190,
-    metadata: { color: "#938e85", visualSize: 0.0175 },
+    metadata: { color: "#938e85", visualSize: 0.035 },
     composition: ["Silicate", "Iron", "Nickel"],
   },
   planet: {
     mass: 3.003e-6,
     radius: EARTH_RADIUS_M / AU_M,
     temperature: 288,
-    metadata: { color: "#70b3c7", visualSize: 0.0425 },
+    metadata: { color: "#70b3c7", visualSize: 0.085 },
   },
   "rogue planet": {
     mass: 9.54e-4,
     radius: 0.00047,
     temperature: 70,
-    metadata: { color: "#6d87bb", visualSize: 0.68 },
+    metadata: { color: "#6d87bb", visualSize: 0.14 },
   },
   comet: {
     mass: 3e-17,
     radius: 2e-8,
     temperature: 80,
     composition: ["Water ice", "Silicate", "Carbon dioxide"],
-    metadata: { color: "#b2ebef", visualSize: 0.0175 },
+    metadata: { color: "#b2ebef", visualSize: 0.035 },
   },
   star: {
     mass: 1,
@@ -275,7 +275,7 @@ export const BODY_PRESETS = {
     luminosity: 1,
     temperature: 5772,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#ffc77a", visualSize: 0.1, solarActivity: 1 },
+    metadata: { color: "#ffc77a", visualSize: 0.2, solarActivity: 1 },
   },
   "red giant": {
     mass: 2,
@@ -283,7 +283,7 @@ export const BODY_PRESETS = {
     luminosity: 100,
     temperature: 3500,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#ff7754", visualSize: 2.4 },
+    metadata: { color: "#ff7754", visualSize: 0.4 },
   },
   "red supergiant": {
     mass: 15,
@@ -291,7 +291,7 @@ export const BODY_PRESETS = {
     luminosity: 60000,
     temperature: 3600,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#fa583c", visualSize: 4 },
+    metadata: { color: "#fa583c", visualSize: 3.1 },
   },
   "white dwarf": {
     mass: 0.6,
@@ -299,7 +299,7 @@ export const BODY_PRESETS = {
     luminosity: 0.01,
     temperature: 17000,
     composition: ["Carbon", "Oxygen"],
-    metadata: { color: "#d9edff", visualSize: 0.17 },
+    metadata: { color: "#d9edff", visualSize: 0.07 },
   },
   "brown dwarf": {
     mass: 0.04,
@@ -307,7 +307,7 @@ export const BODY_PRESETS = {
     luminosity: 0.0001,
     temperature: 1400,
     composition: ["Hydrogen", "Helium"],
-    metadata: { color: "#a36043", visualSize: 0.68 },
+    metadata: { color: "#a36043", visualSize: 0.12 },
   },
   "neutron star": {
     mass: 1.4,
@@ -315,7 +315,7 @@ export const BODY_PRESETS = {
     luminosity: 0.001,
     temperature: 600000,
     composition: ["Neutron-rich matter"],
-    metadata: { color: "#abe6ff", visualSize: 0.003 },
+    metadata: { color: "#abe6ff", visualSize: 0.065 },
   },
   magnetar: {
     mass: 1.7,
@@ -325,22 +325,22 @@ export const BODY_PRESETS = {
     composition: ["Neutron-rich matter"],
     metadata: {
       color: "#c6b0ff",
-      visualSize: 0.035,
+      visualSize: 0.07,
       magneticFieldStrength: 1e10,
     },
   },
   "black hole": {
-    mass: 500,
-    radius: (2 * G_SI * 500 * SOLAR_MASS_KG) / C_M_PER_S ** 2 / AU_M,
+    mass: 5,
+    radius: (2 * G_SI * 5 * SOLAR_MASS_KG) / C_M_PER_S ** 2 / AU_M,
     temperature: 0,
     composition: ["Compact gravitational source"],
-    metadata: { color: "#e8a874", visualSize: 2.72, kerrSpin: 0.6 },
+    metadata: { color: "#e8a874", visualSize: 0.17, kerrSpin: 0.6 },
   },
   wormhole: {
     mass: 1e-15,
     radius: 0.15,
     collisionMode: "ignore",
-    metadata: { color: "#ad9fff", visualSize: 0.085 },
+    metadata: { color: "#ad9fff", visualSize: 0.17 },
   },
   "dark matter halo": {
     mass: 3,
@@ -348,7 +348,7 @@ export const BODY_PRESETS = {
     collisionMode: "ignore",
     temperature: 0,
     composition: ["Hypothetical dark matter"],
-    metadata: { color: "#8a7fcc", visualSize: 1.1, softening: 3 },
+    metadata: { color: "#8a7fcc", visualSize: 3, softening: 3 },
   },
 };
 
@@ -931,7 +931,7 @@ export class PhysicsEngine {
             temperature: Math.min(source.temperature, 5000),
             composition: source.composition,
             metadata: {
-              visualSize: 0.009,
+              visualSize: 0.018,
               color: "#e9aa79",
               collisionCooldown: this.time + this.fixedDt * 32,
               fragment: true,
@@ -1678,7 +1678,7 @@ export const SOLAR_DATA = [
     tilt: 0.034,
     temperature: 440,
     color: "#aba297",
-    size: 0.128,
+    size: 0.045,
     albedo: 0.088,
     composition: ["Iron core", "Silicate mantle"],
     description:
@@ -1694,7 +1694,7 @@ export const SOLAR_DATA = [
     tilt: 2.64,
     temperature: 737,
     color: "#d6ba82",
-    size: 0.32,
+    size: 0.07,
     albedo: 0.77,
     composition: ["Silicate rock", "Iron core", "Carbon dioxide atmosphere"],
     description:
@@ -1711,7 +1711,7 @@ export const SOLAR_DATA = [
     tilt: 23.44,
     temperature: 288,
     color: "#7bbad7",
-    size: 0.34,
+    size: 0.085,
     albedo: 0.306,
     composition: ["Iron / nickel core", "Silicate mantle", "Liquid water"],
     description:
@@ -1728,7 +1728,7 @@ export const SOLAR_DATA = [
     tilt: 25.19,
     temperature: 210,
     color: "#ca8265",
-    size: 0.18,
+    size: 0.06,
     albedo: 0.25,
     composition: ["Iron oxide dust", "Basalt", "Water ice"],
     description:
@@ -1744,7 +1744,7 @@ export const SOLAR_DATA = [
     tilt: 3.13,
     temperature: 165,
     color: "#cbb298",
-    size: 1.36,
+    size: 0.22,
     albedo: 0.503,
     composition: ["Hydrogen", "Helium", "Metallic hydrogen interior"],
     description:
@@ -1760,7 +1760,7 @@ export const SOLAR_DATA = [
     tilt: 26.73,
     temperature: 134,
     color: "#d0bf94",
-    size: 1.26,
+    size: 0.185,
     albedo: 0.342,
     composition: ["Hydrogen", "Helium", "Water-ice rings"],
     description:
@@ -1776,7 +1776,7 @@ export const SOLAR_DATA = [
     tilt: 97.77,
     temperature: 76,
     color: "#9dcbd0",
-    size: 0.748,
+    size: 0.13,
     albedo: 0.3,
     composition: ["Hydrogen", "Helium", "Water / ammonia / methane"],
     description:
@@ -1792,7 +1792,7 @@ export const SOLAR_DATA = [
     tilt: 28.32,
     temperature: 72,
     color: "#5482cb",
-    size: 0.748,
+    size: 0.125,
     albedo: 0.29,
     composition: ["Hydrogen", "Helium", "Methane"],
     description:
@@ -1805,7 +1805,7 @@ export function populateSolarSystem(engine) {
     name: "Sun",
     angularVelocity: [0, (TAU * 365.25) / 25.38, 0],
     metadata: {
-      visualSize: 1.08,
+      visualSize: 2.88,
       color: "#f8c584",
       texture: "sun",
       description:
@@ -1858,7 +1858,7 @@ export function populateSolarSystem(engine) {
     albedo: 0.12,
     composition: ["Silicate", "Basalt"],
     metadata: {
-      visualSize: 0.008625,
+      visualSize: 0.023,
       color: "#b6b9be",
       texture: "moon",
       primaryId: "earth",

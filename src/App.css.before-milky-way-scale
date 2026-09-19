@@ -10805,9 +10805,3 @@ audio[src="/audio/interstellar.mp3"] {
 /* ============================================================
    END POSITION RESTORATION
    ============================================================ */
-
-
-/* EH NASA MILKY WAY FADE */
-.solar-system-reference {
-  opacity: var(--eh-solar-bg-opacity, 0.48) !important;
-}

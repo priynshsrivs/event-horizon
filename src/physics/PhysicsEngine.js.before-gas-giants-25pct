@@ -1805,7 +1805,7 @@ export function populateSolarSystem(engine) {
     name: "Sun",
     angularVelocity: [0, (TAU * 365.25) / 25.38, 0],
     metadata: {
-      visualSize: 1.08,
+      visualSize: 1.44,
       color: "#f8c584",
       texture: "sun",
       description:
@@ -1858,7 +1858,7 @@ export function populateSolarSystem(engine) {
     albedo: 0.12,
     composition: ["Silicate", "Basalt"],
     metadata: {
-      visualSize: 0.008625,
+      visualSize: 0.0115,
       color: "#b6b9be",
       texture: "moon",
       primaryId: "earth",
