@@ -2017,7 +2017,7 @@ function SimulationApp() {
         radius: 1e-9,
         collisionMode: "ignore",
         position: interpolateVoyager(progressValue),
-        velocity: [0.15, 0, 0.02],
+        velocity: [0, 0, 0],
         metadata: { visualSize: 0.2, color: "#b8d9d6", voyagerMission: true }
       });
     } else {
@@ -2508,7 +2508,7 @@ function SimulationApp() {
           </button>
         </div>
       </header>
-      {!selected && !storyRef.current.active && (
+      {!selected && !storyRef.current.active && !voyagerMode && (
         <div
           className="solar-system-reference"
           aria-hidden="true"
