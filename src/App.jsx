@@ -2614,12 +2614,14 @@ function SimulationApp() {
           <div className="eyebrow">INTERSTELLAR EASTER EGG</div>
           <h3>ENDURANCE</h3>
           <p>Deep-space rotating habitat concept from <em>Interstellar</em>, presented here as a lightweight sandbox easter egg.</p>
-          <div className="tars-preview" aria-label="Animated TARS preview">
-            <div className="tars-css">
-              <i></i><b></b><span></span>
-            </div>
+          <div className="tars-preview" aria-label="TARS from Interstellar">
+            <img
+              className="tars-image"
+              src="/tars.jpeg"
+              alt="TARS from Interstellar"
+            />
           </div>
-          <p className="fine-print">TARS preview · CSS animation · low overhead</p>
+          <p className="fine-print">TARS · Interstellar easter egg</p>
         </aside>
       )}
       {voyagerMode && <div className="voyager-hud">
