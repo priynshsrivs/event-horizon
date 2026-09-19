@@ -747,7 +747,6 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
     if (typeof document === "undefined") return null;
 
     const video = document.createElement("video");
-    video.src = "/textures/nasa-blackhole-360.webm";
     video.crossOrigin = "anonymous";
     video.loop = true;
     video.muted = true;
@@ -756,6 +755,20 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
     video.preload = "auto";
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
+    video.setAttribute("disablePictureInPicture", "");
+
+    // Prefer NASA's H.264 MP4 for Safari/macOS compatibility.
+    // Keep WebM as the fallback for browsers that prefer it.
+    const mp4 = document.createElement("source");
+    mp4.src = "/textures/nasa-blackhole-360.mp4";
+    mp4.type = "video/mp4";
+
+    const webm = document.createElement("source");
+    webm.src = "/textures/nasa-blackhole-360.webm";
+    webm.type = "video/webm";
+
+    video.appendChild(mp4);
+    video.appendChild(webm);
 
     return video;
   }, []);
