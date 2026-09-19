@@ -649,6 +649,42 @@ function VoyagerPanel({ story, engine, progress, setProgress, active, setActive,
   );
 }
 
+function VoyagerPanel({ story, engine, progress, setProgress, active, setActive, onSelect, deepTimeTarget, setDeepTimeTarget, act }) {
+  const index = Math.min(story.waypoints.length - 1, Math.floor(progress * story.waypoints.length));
+  const waypoint = story.waypoints[index];
+  return (
+    <aside className="panel voyager-panel">
+      <PanelHeading eyebrow="MISSION STORY" title="Voyager's Journey" icon="story" onClose={() => setActive(false)} />
+      <p className="panel-intro">{story.description}</p>
+      <section className="panel-section">
+        <button className="button warm full" onClick={() => {
+          const body = engine.getBody("voyager-1") || engine.spawnBody("asteroid", { id:"voyager-1", name:"Voyager 1", mass:1e-10, radius:1e-9, collisionMode:"ignore", metadata:{ visualSize:0.2, color:"#b8d9d6", voyagerMission:true }});
+          onSelect(body.id);
+          setActive(!active);
+        }}>{active ? "Pause mission" : "Start mission"}</button>
+        <label className="range-label">MISSION YEAR <output>{Math.round(1977 + (2012-1977)*progress)}</output>
+          <input type="range" min="0" max="1" step="0.001" value={progress} onChange={(e) => setProgress(+e.target.value)} />
+        </label>
+      </section>
+      <section className="panel-section">
+        <h3>{waypoint.label}</h3>
+        <dl className="data-rows">
+          <Metric label="Mission elapsed" value={fmt((1977 + (2012-1977)*progress) - 1977, 1)} unit="yr" />
+          <Metric label="Velocity" value={fmt(17, 1)} unit="km/s" />
+          <Metric label="Distance from Earth" value={fmt(165 * progress, 1)} unit="AU" />
+        </dl>
+      </section>
+      <section className="panel-section">
+        <h3>Deep time · stellar evolution</h3>
+        <label className="range-label"><output>{(deepTimeTarget/1e9).toFixed(2)} Gyr</output>
+          <input type="range" min="0" max="5000000000" step="10000000" value={deepTimeTarget} onChange={(e) => { const v=+e.target.value; setDeepTimeTarget(v); act(() => engine.applyDeepTime(v)); }} />
+        </label>
+        <button className="button full" onClick={() => act(() => { engine.fastForwardDeepTime(5e9); setDeepTimeTarget(5e9); })}>Fast-forward to +5 Gyr</button>
+      </section>
+    </aside>
+  );
+}
+
 function GodPanel({
   engine,
   selected,
@@ -2129,6 +2165,8 @@ function SimulationApp() {
         setEnduranceVisible(true);
         setEnduranceFocused(false);
       }
+      if (["bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula","deepTime"].includes(event.type) && panel === "god")
+        setEnduranceVisible(false);
       if (["gravityChanged","bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula"].includes(event.type) && panel === "god")
         setEnduranceVisible(false);
       const label = eventLabels[event.type];
@@ -2630,7 +2668,21 @@ function SimulationApp() {
             onSelect={select}
           />
         )}
-        {panel === "physics" && (
+        {panel === "voyager" && (
+          <VoyagerPanel
+            story={voyagerStory["voyager-1-journey"]}
+            engine={engine}
+            progress={voyagerProgress}
+            setProgress={setVoyagerProgress}
+            active={voyagerMode}
+            setActive={setVoyagerMode}
+            onSelect={select}
+            deepTimeTarget={deepTimeTarget}
+            setDeepTimeTarget={setDeepTimeTarget}
+            act={act}
+          />
+        )}
+                {panel === "physics" && (
           <PhysicsPanel
             engine={engine}
             samples={samples}
