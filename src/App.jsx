@@ -2455,6 +2455,9 @@ function SimulationApp() {
             )
           }
           storyMode={panel === "story"}
+          enduranceVisible={enduranceVisible}
+          enduranceFocused={enduranceFocused}
+          onEnduranceFocus={() => setEnduranceFocused(true)}
         />
         <Voyager mission={voyagerStory["voyager-1-journey"]} active={voyagerMode} progress={voyagerProgress} />
       </RenderBoundary>
