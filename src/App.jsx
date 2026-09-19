@@ -9,7 +9,6 @@ import PhysicsEngine, {
 } from "./physics/PhysicsEngine.js";
 import { CHAPTERS, initializeChapter } from "./physics/story.js";
 import voyagerStory from "./data/stories.json";
-import Voyager from "./scene/Voyager.jsx";
 import Universe from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
