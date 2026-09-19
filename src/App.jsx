@@ -2169,8 +2169,6 @@ function SimulationApp() {
       }
       if (isGodModeActive && ["bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula","deepTime"].includes(event.type))
         setEnduranceVisible(false);
-      if (["gravityChanged","bodyUpdated","bodyAdded","bodyRemoved","bodyMerged","supernova","planetaryNebula"].includes(event.type) && panel === "god")
-        setEnduranceVisible(false);
       const label = eventLabels[event.type];
       if (label) {
         const message = `${label}${event.star?.name || event.body?.name || event.name ? ` · ${event.star?.name || event.body?.name || event.name}` : ""}`;
