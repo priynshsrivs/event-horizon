@@ -1736,6 +1736,7 @@ function CameraController({
   panelOpen,
   storyMode,
   effects = [],
+  enduranceFocused = false,
 }) {
   const { camera, size } = useThree();
   const target = useRef(new THREE.Vector3()),
@@ -1821,7 +1822,11 @@ function CameraController({
     }
 
     const body = engine.getBody(selectedId);
-    if (body) {
+    if (enduranceFocused) {
+      target.current.set(150, 20, -100);
+      offset.current.set(8.5, 5.2, 11.5);
+      orbit.minDistance = 0.5;
+    } else if (body) {
       target.current.set(...bodyPosition(body, engine, settings.compressed));
       const r = visualRadius(body),
         distance = Math.max(
@@ -2202,7 +2207,10 @@ function Scene({
   panelOpen,
   storyMode,
   enduranceVisible = true,
+  enduranceFocused = false,
   onEnduranceFocus,
+  voyagerActive = false,
+  voyagerProgress = 0,
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const cinematicIntensity = Math.min(
