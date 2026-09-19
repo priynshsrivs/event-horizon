@@ -1241,8 +1241,8 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
               {star ? (
                 <meshBasicMaterial
                   key={texture?.uuid || "fallback"}
-                  map={texture}
-                  color={texture ? "#ffe5bf" : color}
+                  map={body.metadata.stellarEvolutionPhase ? null : texture}
+                  color={body.metadata.stellarEvolutionPhase ? color : (texture ? "#ffe5bf" : color)}
                   toneMapped
                 />
               ) : (
