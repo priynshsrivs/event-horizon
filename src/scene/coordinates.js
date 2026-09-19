@@ -127,6 +127,11 @@ export function unmapPosition(position, compressed = true) {
   );
 }
 
+export function moonOrbitVisualRadius(primary) {
+  if (!primary) return 1;
+  return Math.max(visualRadius(primary) * 1.85, 1.0);
+}
+
 export function bodyPosition(body, engine, compressed = true) {
   if (!body) return [0, 0, 0];
 
@@ -149,15 +154,16 @@ export function bodyPosition(body, engine, compressed = true) {
 
     if (primary) {
       const center = mapPosition(primary.position, compressed);
-      const relative = body.position
-        .clone()
-        .sub(primary.position)
-        .multiplyScalar(160);
+      const relative = body.position.clone().sub(primary.position);
+      const direction = relative.length()
+        ? relative.normalize()
+        : new Vector3(1, 0, 0);
+      const orbitRadius = moonOrbitVisualRadius(primary);
 
       return [
-        center[0] + finiteNumber(relative.x),
-        center[1] + finiteNumber(relative.y),
-        center[2] + finiteNumber(relative.z),
+        center[0] + finiteNumber(direction.x * orbitRadius),
+        center[1] + finiteNumber(direction.y * orbitRadius),
+        center[2] + finiteNumber(direction.z * orbitRadius),
       ];
     }
   }
