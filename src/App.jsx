@@ -14,6 +14,7 @@ import Universe from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
 import { playTone } from "./ui/audio.js";
+import "./scene/Endurance.css";
 
 const DEFAULT_SETTINGS = {
   orbits: true,
