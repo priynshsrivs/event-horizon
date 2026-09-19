@@ -1943,7 +1943,6 @@ function SimulationApp() {
   const isGodModeActive = panel === "god";
   const panelRef = useRef(panel);
   panelRef.current = panel;
-  const voyagerMission = voyagerStory["voyager-1-journey"];
   const [showSettings, setShowSettings] = useState(false),
     [showObjects, setShowObjects] = useState(true),
     [hint, setHint] = useState(() => {
