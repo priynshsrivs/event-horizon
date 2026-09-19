@@ -2189,6 +2189,8 @@ function Scene({
   onFrame,
   panelOpen,
   storyMode,
+  enduranceVisible = true,
+  onEnduranceFocus,
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const cinematicIntensity = Math.min(
@@ -2268,7 +2270,7 @@ function Scene({
   const bodies = engine.getBodies();
   return (
     <>
-      <Endurance visible={settings.enduranceVisible !== false} onFocus={() => {}} />
+      <Endurance visible={enduranceVisible} onFocus={onEnduranceFocus} />
             <SpaceBackground settings={settings} />
 
       <CinematicParticles
