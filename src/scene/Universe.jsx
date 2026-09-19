@@ -286,24 +286,72 @@ function CinematicDust({ settings, reduced }) {
 }
 
 function SpaceBackground({ settings }) {
-  const texture = null;
-  const { scene } = useThree();
+  const galaxy = useSafeTexture("galaxy");
+  const { scene, camera } = useThree();
   const reduced = usePrefersReducedMotion();
-  const backgroundDrift = useRef(0);
 
   useEffect(() => {
     scene.background = new THREE.Color("#020307");
     scene.backgroundIntensity = 1;
+    scene.backgroundBlurriness = 0;
 
     return () => {
-      if (scene.background?.isColor) {
-        scene.background = null;
-      }
+      scene.background = null;
     };
   }, [scene]);
 
   useFrame(() => {
-    if (reduced) return;
+    const distance = camera.position.length();
+
+    /*
+     * Render the Milky Way as Scene#background, not as a world-space mesh.
+     * This makes the galaxy independent of zoom distance, frustum clipping,
+     * culling, and camera orientation.
+     */
+    const galaxyFade = THREE.MathUtils.smoothstep(
+      distance,
+      80,
+      760,
+    );
+
+    const galaxyStrength =
+      settings.quality === "high"
+        ? 0.92
+        : settings.quality === "medium"
+          ? 0.80
+          : 0.68;
+
+    if (galaxy) {
+      if (scene.background !== galaxy) {
+        scene.background = galaxy;
+      }
+
+      scene.backgroundIntensity =
+        galaxyFade *
+        galaxyStrength *
+        (reduced
+          ? 1
+          : 0.985 + Math.sin(performance.now() * 0.00008) * 0.015);
+
+      scene.backgroundBlurriness = 0;
+    } else {
+      if (!scene.background?.isColor) {
+        scene.background = new THREE.Color("#020307");
+      }
+      scene.backgroundIntensity = 1;
+      scene.backgroundBlurriness = 0;
+    }
+
+    /*
+     * The solar-system reference image is a DOM layer above the WebGL
+     * canvas. Fade it out as the NASA galaxy becomes the background.
+     */
+    if (typeof document !== "undefined") {
+      document.documentElement.style.setProperty(
+        "--eh-solar-bg-opacity",
+        String((0.48 * (1 - galaxyFade)).toFixed(3)),
+      );
+    }
   });
 
   const density =
@@ -340,7 +388,8 @@ function SpaceBackground({ settings }) {
         color="#d4b98f"
         reduced={reduced}
       />
-      /* EH FAR-SCALE GALACTIC STAR FIELD */
+
+      {/* Continue the star field into the galaxy-scale view. */}
       <AnimatedStarLayer
         count={Math.floor(density * 0.12)}
         radius={1200}
@@ -355,14 +404,7 @@ function SpaceBackground({ settings }) {
       <CinematicDust settings={settings} reduced={reduced} />
     </group>
   );
-}
-
-
-/* ============================================================
-   EVENT HORIZON — NASA MILKY WAY GALAXY SCALE
-   ============================================================ */
-
-function MilkyWayGalaxy({ settings }) {
+}) {
   const texture = useSafeTexture("galaxy");
   const { camera } = useThree();
 
@@ -2136,7 +2178,6 @@ function Scene({
   const bodies = engine.getBodies();
   return (
     <>
-      <MilkyWayGalaxy settings={settings} />
       <SpaceBackground settings={settings} />
 
       <CinematicParticles
@@ -2213,7 +2254,7 @@ function Scene({
         makeDefault
         enableDamping
         dampingFactor={0.07}
-        maxDistance={2400}
+        maxDistance={5000}
         enablePan
         enableZoom
         zoomSpeed={2.5}
