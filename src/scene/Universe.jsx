@@ -13,7 +13,8 @@ import CinematicParticles from "../cinematic/components/CinematicParticles.jsx";
 import CinematicShockwave from "../cinematic/components/CinematicShockwave.jsx";
 import CinematicWormhole from "../cinematic/components/CinematicWormhole.jsx";
 import CinematicAtmosphere from "../cinematic/components/CinematicAtmosphere.jsx";
-import Endurance, { TarsPreview } from "./Endurance.jsx";
+import Endurance from "./Endurance.jsx";
+import Voyager from "./Voyager.jsx";
 import {
   Vector3,
   CelestialBody,
@@ -32,6 +33,17 @@ import {
 const textureCache = new Map();
 const textureRequests = new Map();
 const loader = new THREE.TextureLoader();
+const voyagerStoryFallback = {
+  waypoints: [
+    { year: 1977, label: "Earth Launch & Orbital Insertion" },
+    { year: 1979, label: "Jupiter Flyby" },
+    { year: 1980, label: "Saturn Flyby & Titan Diversion" },
+    { year: 2012, label: "Heliopause / Interstellar Space" }
+  ],
+  display: { presentDistanceAU: 165, presentVelocityKMS: 17 }
+};
+
+
 
 const TEXTURE_EXTENSIONS = {
   earth_clouds: ["png", "jpg", "jpeg", "webp"],
@@ -2297,7 +2309,7 @@ function Scene({
         <HabitableZone engine={engine} compressed={settings.compressed} />
       )}
       {bodies.map((body) => (
-        <PlanetBody
+        body.id === "voyager-1" ? null : <PlanetBody
           key={body.id}
           body={body}
           engine={engine}
@@ -2307,7 +2319,18 @@ function Scene({
           building={!!buildTool}
         />
       ))}
-      {settings.links &&
+      {voyagerActive && engine.getBody("voyager-1") && (
+        <Voyager
+          mission={voyagerStoryFallback}
+          active
+          progress={voyagerProgress}
+          position={bodyPosition(engine.getBody("voyager-1"), engine, settings.compressed)}
+          selected={selectedId === "voyager-1"}
+          visible
+          onClick={(e) => { e.stopPropagation(); onSelect("voyager-1"); }}
+        />
+      )}
+            {settings.links &&
         bodies
           .filter((b) => b.type === "wormhole")
           .map((body) => {
