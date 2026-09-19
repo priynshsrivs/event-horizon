@@ -1,7 +1,7 @@
 let context = null;
 let master = null;
 let music = null;
-let volume = 0.25;
+let volume = 0.72;
 let muted = true;
 try { muted = globalThis.localStorage?.getItem("eh-muted") !== "false"; } catch {}
 const listeners = new Set();
@@ -17,14 +17,14 @@ export function setMuted(value) {
 }
 export function setAudioVolume(value) {
   volume = clampVolume(value);
-  if (music) music.volume = volume * 0.64;
+  if (music) music.volume = Math.min(1, volume * 1.15);
 }
 export function unlockAudio() {
   if (muted || typeof window === "undefined") return;
   try {
     if (!music) { music = new Audio("/audio/interstellar.mp3"); music.loop = true; music.preload = "none"; }
     music.muted = muted;
-    music.volume = volume * 0.64;
+    music.volume = Math.min(1, volume * 1.15);
     if (music.paused) music.play()?.catch(() => {});
     if (context?.state === "suspended") context.resume()?.catch(() => {});
   } catch {}
@@ -153,7 +153,7 @@ export function playTone(kind = "click", volume = 0.25) {
       now + duration,
     );
 
-    const peak = Math.max(0.0001, safeVolume * definition.level);
+    const peak = Math.max(0.0001, Math.min(0.9, safeVolume * definition.level * 2.75));
 
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(
