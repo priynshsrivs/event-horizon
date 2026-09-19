@@ -50,6 +50,8 @@ const eventLabels = {
   deepTime: "Deep-time evolution",
   rocheLimitBreach: "Roche limit breached",
 };
+const STORY_CHAPTERS = CHAPTERS.slice(3);
+
 const EXOTIC_TYPES = [
   "asteroid",
   "planet",
@@ -2119,11 +2121,12 @@ function SimulationApp() {
     (index) => {
       storySeekId.current++;
       setSeeking(false);
-      index = Math.max(0, Math.min(7, index));
+      index = Math.max(0, Math.min(STORY_CHAPTERS.length - 1, index));
+      const engineChapterIndex = index + 3;
       setChapter(index);
       setStoryProgress(0);
       storyRef.current = { active: true, chapter: index, progress: 0 };
-      select(initializeChapter(engine, index));
+      select(initializeChapter(engine, engineChapterIndex));
       setHomeToken((v) => v + 1);
       onChange();
     },
@@ -2954,12 +2957,12 @@ function SimulationApp() {
       {panel === "story" && storyRef.current.active ? (
         <section className="story-overlay" aria-busy={seeking}>
           <div className="story-caption">
-            <span className="eyebrow">{CHAPTERS[chapter].era}</span>
-            <h2>{CHAPTERS[chapter].title}</h2>
-            <p>{CHAPTERS[chapter].caption}</p>
+            <span className="eyebrow">{STORY_CHAPTERS[chapter].era}</span>
+            <h2>{STORY_CHAPTERS[chapter].title}</h2>
+            <p>{STORY_CHAPTERS[chapter].caption}</p>
           </div>
           <div className="chapter-timeline">
-            {CHAPTERS.map((c, i) => (
+            {STORY_CHAPTERS.map((c, i) => (
               <button
                 key={c.era}
                 className={
@@ -3012,7 +3015,7 @@ function SimulationApp() {
               className="button"
               disabled={seeking}
               onClick={() => {
-                if (chapter === 7) {
+                if (chapter === STORY_CHAPTERS.length - 1) {
                   closeStory(false);
                   openPanel("god");
                 } else startChapter(chapter + 1);
