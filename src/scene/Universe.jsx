@@ -1764,7 +1764,7 @@ function CameraController({
     positionVelocity.current.set(0, 0, 0);
     targetVelocity.current.set(0, 0, 0);
     previous.current.set(0, 0, 0);
-  }, [selectedId, homeToken, settings.compressed, size.width, size.height, reduced]);
+  }, [selectedId, homeToken, settings.compressed, size.width, size.height, reduced, enduranceFocused]);
 
   useEffect(() => {
     if (panelOpen || storyMode)
