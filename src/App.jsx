@@ -2518,6 +2518,20 @@ function SimulationApp() {
           }}
         />
       )}
+      {enduranceFocused && enduranceVisible && (
+        <aside className="endurance-card">
+          <button className="icon-button endurance-close" aria-label="Close Endurance card" onClick={() => setEnduranceFocused(false)}>×</button>
+          <div className="eyebrow">INTERSTELLAR EASTER EGG</div>
+          <h3>ENDURANCE</h3>
+          <p>Deep-space rotating habitat concept from <em>Interstellar</em>, presented here as a lightweight sandbox easter egg.</p>
+          <div className="tars-preview" aria-label="Animated TARS preview">
+            <div className="tars-css">
+              <i></i><b></b><span></span>
+            </div>
+          </div>
+          <p className="fine-print">TARS preview · CSS animation · low overhead</p>
+        </aside>
+      )}
       {voyagerMode && <div className="voyager-hud">
         <div className="eyebrow">VOYAGER 1 · MISSION HUD</div>
         <div className="mission-title">{voyagerStory["voyager-1-journey"].waypoints[Math.min(3, Math.floor(voyagerProgress * 4))].label}</div>
