@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { appendVisualEffect } from "./scene/effectTiming.js";
 import PhysicsEngine, {
   AU_M,
   SOLAR_MASS_KG,
@@ -10,7 +11,7 @@ import PhysicsEngine, {
 import { CHAPTERS, initializeChapter } from "./physics/story.js";
 import voyagerStoryData from "./data/stories.json";
 const voyagerStory = { "voyager-1-journey": presentMission(voyagerStoryData["voyager-1-journey"]) };
-import Universe from "./scene/Universe.jsx";
+import Universe, { preloadRequiredTexture } from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
 import { playTone, getMuted, setMuted, subscribeAudio, mountAudio, setAudioVolume } from "./ui/audio.js";
@@ -1174,6 +1175,7 @@ const SPLASH_STAGE_TWO_IMAGE = "/textures/splash/images-4.jpeg";
 const SPLASH_STAGE_THREE_IMAGE = "/textures/splash/images-2.jpeg";
 
 const CRITICAL_BOOT_ASSETS = [
+  { type: "texture", name: "sun", url: "/textures/sun.jpg", label: "SUN SURFACE" },
   { type: "image", url: SPLASH_STAGE_ONE_IMAGE, label: "SPLASH IMAGE 01" },
   { type: "image", url: SPLASH_STAGE_TWO_IMAGE, label: "SPLASH IMAGE 02" },
   { type: "image", url: SPLASH_STAGE_THREE_IMAGE, label: "SPLASH IMAGE 03" },
@@ -1183,6 +1185,10 @@ const CRITICAL_BOOT_ASSETS = [
 ];
 
 async function preloadCriticalAsset(asset) {
+  if (asset.type === "texture") {
+    await preloadRequiredTexture(asset.name);
+    return;
+  }
   if (asset.type === "font") {
     const response = await fetch(asset.url, { cache: "force-cache" });
     if (!response.ok) throw new Error(`${asset.url} returned HTTP ${response.status}`);
@@ -2264,8 +2270,7 @@ function SimulationApp() {
           event.type,
         )
       )
-        setEffects((old) => [
-          ...old.slice(-15),
+        setEffects((old) => appendVisualEffect(old,
           {
             id: ++nextId.current,
             type: event.type,
@@ -2275,7 +2280,7 @@ function SimulationApp() {
             rotation: event.flare?.direction?.map((n) => n * Math.PI * 2),
             at: Date.now(),
           },
-        ]);
+        ));
     });
     const timer = setInterval(() => {
       refresh((v) => v + 1);
@@ -2460,7 +2465,7 @@ function SimulationApp() {
   }, [cancelStorySeek, engine, onChange, seeking, seekHistoryBy, voyagerMode]);
 
   const deepTimeProgress = Math.max(0, Math.min(1, deepTimeTarget / 5e9));
-  const activeEffect = effects.at(-1);
+  const activeEffect = effects.findLast((effect) => effect.type !== "solarFlare");
   const speedBand =
     engine.timeScale < 0
       ? "rewind"

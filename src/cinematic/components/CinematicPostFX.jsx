@@ -7,6 +7,7 @@ import {
   Noise,
   Vignette,
   EffectGroup,
+  SMAA,
 } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
 
@@ -26,6 +27,10 @@ export default function CinematicPostFX({
   engine,
   settings,
 }) {
+  // An inactive composer still changes renderer clearing/tone mapping when
+  // mounted. Let Fiber own the renderer completely when effects are off.
+  if (!enabled) return null;
+
   if (quality === "low") {
     return (
       <EffectComposer multisampling={0} resolutionScale={0.7} enabled={enabled}>
@@ -41,7 +46,9 @@ export default function CinematicPostFX({
 
   return (
     <EffectComposer
-      multisampling={high ? 4 : 2}
+      // Multisampled post-processing targets intermittently lose scene color
+      // with the depth-aware lensing pass. Use a single-sample target and SMAA.
+      multisampling={0}
       resolutionScale={1}
       mergeMode="auto"
       enabled={enabled}
@@ -71,6 +78,8 @@ export default function CinematicPostFX({
         )}
         <Vignette offset={0.24} darkness={0.58 + event * 0.08} eskil={false} />
       </EffectGroup>
+
+      <SMAA />
 
     </EffectComposer>
   );

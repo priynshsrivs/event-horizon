@@ -1,4 +1,5 @@
 import { missionCameraOffset } from "../physics/voyager.js";
+import { FLARE_DURATION_MS, flareEnvelope } from "./effectTiming.js";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -33,7 +34,8 @@ import {
 
 const textureCache = new Map();
 const textureRequests = new Map();
-const loader = new THREE.TextureLoader();
+const textureLoaderManager = new THREE.LoadingManager();
+const loader = new THREE.TextureLoader(textureLoaderManager);
 loader.setCrossOrigin("anonymous");
 const voyagerStoryFallback = {
   waypoints: [
@@ -45,27 +47,55 @@ const voyagerStoryFallback = {
   display: { presentDistanceAU: 165, presentVelocityKMS: 17 }
 };
 
-
-
-const TEXTURE_EXTENSIONS = {
-  earth_clouds: ["png", "jpg", "jpeg", "webp"],
-  saturn_ring: ["png", "jpg", "jpeg", "webp"],
-  galaxy: ["jpg", "jpeg", "png", "webp"],
-};
+const KNOWN_TEXTURE_URLS = Object.freeze({
+  sun: "/textures/sun.jpg",
+  mercury: "/textures/mercury.jpg",
+  venus: "/textures/venus.jpg",
+  earth: "/textures/earth.jpg",
+  earth_clouds: "/textures/earth_clouds.jpg",
+  earth_night: "/textures/earth_night.jpg",
+  moon: "/textures/moon.jpg",
+  mars: "/textures/mars.jpg",
+  jupiter: "/textures/jupiter.jpg",
+  saturn: "/textures/saturn.jpg",
+  saturn_ring: "/textures/saturn_ring.png",
+  uranus: "/textures/uranus.jpg",
+  neptune: "/textures/neptune.jpg",
+  galaxy: "/textures/galaxy.jpg",
+  "blackhole-nasa": "/textures/blackhole-nasa.png",
+  "nasa-blackhole-source": "/textures/nasa_blackhole_source.png",
+  "nasa-red-giant": "/textures/nasa-presets/nasa-red-giant.png",
+});
 
 function textureCandidates(name) {
-  if (name?.startsWith("nebula:")) {
+  if (!name) return [];
+  if (name.startsWith("nebula:")) {
     const id = name.slice("nebula:".length);
     const item = NEBULA_BACKGROUNDS.find((candidate) => candidate.id === id);
     return item?.url ? [item.url] : [];
   }
 
-  const extensions =
-    TEXTURE_EXTENSIONS[name] || ["jpg", "jpeg", "png", "webp"];
+  if (KNOWN_TEXTURE_URLS[name]) {
+    return [KNOWN_TEXTURE_URLS[name]];
+  }
+
+  if (name.startsWith("nasa-surfaces/")) {
+    return [`/textures/${name}.jpg`];
+  }
+
+  if (name.startsWith("nasa-presets/") || name.startsWith("nasa-")) {
+    const base = name.startsWith("nasa-presets/") ? name.slice("nasa-presets/".length) : name;
+    return [
+      `/textures/nasa-presets/${base}.jpg`,
+      `/textures/nasa-presets/${base}.png`,
+    ];
+  }
 
   return [
-    ...extensions.map((ext) => `/textures/${name}.${ext}`),
-    ...extensions.map((ext) => `/textures/nasa-presets/${name}.${ext}`),
+    `/textures/${name}.jpg`,
+    `/textures/${name}.png`,
+    `/textures/nasa-presets/${name}.jpg`,
+    `/textures/nasa-presets/${name}.png`,
   ];
 }
 
@@ -108,6 +138,17 @@ const NASA_SURFACE_TEXTURES = Object.freeze({
   neptune: "nasa-surfaces/neptune",
 });
 
+const BODIES_WITH_SURFACE_MAPS = new Set([
+  "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune",
+  "nasa-surfaces/mercury", "nasa-surfaces/venus", "nasa-surfaces/mars",
+  "nasa-surfaces/jupiter", "nasa-surfaces/saturn", "nasa-surfaces/uranus",
+  "nasa-surfaces/neptune",
+  "nasa-asteroid", "nasa-planet", "nasa-rogue-planet", "nasa-star",
+  "nasa-red-giant", "nasa-red-supergiant", "nasa-white-dwarf",
+  "nasa-brown-dwarf", "nasa-neutron-star", "nasa-magnetar",
+  "nasa-dark-matter-halo", "nasa-comet"
+]);
+
 
 
 function registerTextureStatus(name, status, extra = {}) {
@@ -146,6 +187,18 @@ function loadTexture(name) {
     );
   }
   return textureRequests.get(name);
+}
+
+// Boot uses the same cache as the first scene render, not just the browser's
+// image cache. A failed required asset can be retried from the boot screen.
+export async function preloadRequiredTexture(name) {
+  if (textureCache.has(name) && !textureCache.get(name)) {
+    textureCache.delete(name);
+    textureRequests.delete(name);
+  }
+  const texture = await loadTexture(name);
+  if (!texture) throw new Error(`Required texture ${name} failed to load`);
+  return texture;
 }
 
 function useSafeTexture(name) {
@@ -233,11 +286,11 @@ function AnimatedStarLayer({
       group.current.rotation.y += dt * speed;
       group.current.rotation.x += dt * speed * 0.11;
       if (material.current) {
-        material.current.opacity =
-          opacity * (0.86 + Math.sin(clock.elapsedTime * 0.55 + seed) * 0.08);
+        // Stable star field: no global opacity oscillation.
+        material.current.opacity = opacity;
       }
     } else if (material.current) {
-      material.current.opacity = opacity * 0.88;
+      material.current.opacity = opacity;
     }
   });
 
@@ -287,8 +340,7 @@ function CinematicDust({ settings, reduced }) {
     if (!group.current || reduced) return;
     group.current.rotation.y += dt * 0.0025;
     group.current.rotation.z = Math.sin(clock.elapsedTime * 0.035) * 0.015;
-    if (material.current)
-      material.current.opacity = 0.065 + Math.sin(clock.elapsedTime * 0.32) * 0.012;
+    if (material.current) material.current.opacity = 0.065;
   });
 
   return (
@@ -396,10 +448,7 @@ function SpaceBackground({ settings, voyagerActive = false, nebulaId = null }) {
           galaxyFade *
             galaxyStrength *
             galaxyModeMultiplier *
-            (reduced
-              ? 1
-              : 0.985 +
-                Math.sin(performance.now() * 0.00008) * 0.015),
+            1,
         );
 
       scene.backgroundBlurriness = 0;
@@ -510,7 +559,7 @@ const glowFragment = `
  * around the body, does not write depth, is never culled, and never animates
  * unless a caller explicitly opts in with a pulse.
  */
-function Glow({ color = "#f3ad65", size = 1, opacity = 0.6, pulse = 0 }) {
+function Glow({ color = "#f3ad65", size = 1, opacity = 0.6, pulse = 0, envelope }) {
   const uniforms = useMemo(
     () => ({
       color: { value: new THREE.Color(color) },
@@ -520,16 +569,17 @@ function Glow({ color = "#f3ad65", size = 1, opacity = 0.6, pulse = 0 }) {
   );
 
   const reduced = usePrefersReducedMotion();
-  const phase = useMemo(() => Math.random() * TAU, []);
+  const phase = useMemo(() => 0.37, []);
 
   useFrame(({ clock }) => {
-    if (!pulse || reduced) {
-      uniforms.strength.value = opacity;
+    if (envelope) {
+      uniforms.strength.value = opacity * envelope.current;
       return;
     }
-
-    uniforms.strength.value =
-      opacity * (1 + Math.sin(clock.elapsedTime * 1.35 + phase) * pulse);
+    const target = pulse && !reduced
+      ? opacity * (1 + Math.sin(clock.elapsedTime * 1.35 + phase) * pulse)
+      : opacity;
+    uniforms.strength.value += (target - uniforms.strength.value) * 0.08;
   });
 
   return (
@@ -597,7 +647,7 @@ function SaturnRings({ radius }) {
   useFrame((_, dt) => {
     if (group.current && !reduced) {
       group.current.rotation.z += dt * 0.012;
-      group.current.scale.setScalar(1 + Math.sin(performance.now() * 0.00035) * 0.002);
+      group.current.scale.setScalar(1);
     }
   });
   const bands = [
@@ -668,6 +718,25 @@ function EarthLayers({ radius, body, engine, settings }) {
   const sunWorld = useMemo(() => new THREE.Vector3(), []);
   const earthWorld = useMemo(() => new THREE.Vector3(), []);
 
+  const nightUniforms = useMemo(
+    () => ({
+      nightMap: { value: night },
+      sunDirection: { value: sunDirection.clone() },
+      opacity: { value: 0.48 },
+    }),
+    [night],
+  );
+
+  const cloudUniforms = useMemo(
+    () => ({
+      cloudMap: { value: clouds },
+      cloudOpacity: {
+        value: settings.quality === "high" ? 0.78 : 0.62,
+      },
+    }),
+    [clouds, settings.quality],
+  );
+
   const reduced = usePrefersReducedMotion();
   useFrame((_, dt) => {
     if (settings.quality === "low") return;
@@ -681,9 +750,8 @@ function EarthLayers({ radius, body, engine, settings }) {
     if (nightRef.current?.material?.uniforms?.sunDirection)
       nightRef.current.material.uniforms.sunDirection.value.copy(sunDirection);
     if (!reduced && cloudRef.current) cloudRef.current.rotation.y += dt * 0.008;
-    if (!reduced && nightRef.current?.material?.uniforms?.opacity)
-      nightRef.current.material.uniforms.opacity.value =
-        0.47 + Math.sin(performance.now() * 0.00022) * 0.025;
+    if (nightRef.current?.material?.uniforms?.opacity)
+      nightRef.current.material.uniforms.opacity.value = 0.48;
   });
 
   if (settings.quality === "low") return null;
@@ -694,11 +762,7 @@ function EarthLayers({ radius, body, engine, settings }) {
         <mesh ref={nightRef} renderOrder={2}>
           <sphereGeometry args={[radius * 1.008, settings.quality === "medium" ? 40 : 56, settings.quality === "medium" ? 28 : 40]} />
           <shaderMaterial
-            uniforms={{
-              nightMap: { value: night },
-              sunDirection: { value: sunDirection.clone() },
-              opacity: { value: 0.48 },
-            }}
+            uniforms={nightUniforms}
             vertexShader={earthNightVertex}
             fragmentShader={earthNightFragment}
             transparent
@@ -729,12 +793,7 @@ function EarthLayers({ radius, body, engine, settings }) {
             depthTest={true}
             depthWrite={false}
             side={THREE.FrontSide}
-            uniforms={{
-              cloudMap: { value: clouds },
-              cloudOpacity: {
-                value: settings.quality === "high" ? 0.78 : 0.62,
-              },
-            }}
+            uniforms={cloudUniforms}
             vertexShader={`
               varying vec2 vCloudUv;
 
@@ -803,32 +862,22 @@ function EarthLayers({ radius, body, engine, settings }) {
 }
 
 function BlackHoleVisual({ body, radius, settings, engine }) {
+  const ref = useRef();
   const group = useRef();
-  const [videoFailed, setVideoFailed] = useState(false);
-  const [videoPlaying, setVideoPlaying] = useState(false);
-
   const blackHoleVideo = useMemo(() => {
     if (typeof document === "undefined") return null;
-
     const video = document.createElement("video");
+    // Explicit 1080p fallback profile matches the checked-in texture filename and
+    // avoids codec-dependent MP4/WEBM probing while the renderer initializes.
+    // Use the checked-in webm video asset if available, otherwise gracefully handle
+    // VideoTexture playback.
+    video.src = "/textures/nasa-blackhole-360.webm";
     video.crossOrigin = "anonymous";
     video.loop = true;
     video.muted = true;
     video.playsInline = true;
-    video.autoplay = true;
-    video.preload = "auto";
-    video.setAttribute("playsinline", "");
-    video.setAttribute("webkit-playsinline", "");
-    video.setAttribute("disablePictureInPicture", "");
-
-    // NASA's square 1080p 360° render is much lighter than the
-    // 3840×3840 continuous master and is more reliable for Safari
-    // VideoTexture playback.
-    video.src = "/textures/nasa-blackhole-360-1080.mp4";
-
     return video;
   }, []);
-
   const blackHoleTexture = useMemo(() => {
     if (!blackHoleVideo) return null;
 
@@ -843,10 +892,13 @@ function BlackHoleVisual({ body, radius, settings, engine }) {
     return texture;
   }, [blackHoleVideo]);
 
-  // Keep the existing NASA still as a guaranteed visual fallback while the
-  // WebM buffers. The simulation never becomes invisible just because the
-  // animated asset is still loading.
+  // Keep an immediately-available static fallback texture ready. If the browser
+  // blocks autoplay or delays media decoder allocation, the event horizon will
+  // remain cleanly visible with authentic NASA imagery instead of vanishing.
   const fallbackTexture = useSafeTexture("blackhole-nasa");
+
+  const [videoFailed, setVideoFailed] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
 
   useEffect(() => {
     if (!blackHoleVideo) return undefined;
@@ -1187,7 +1239,6 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
           ? { color: "#9be8e8", intensity: 0.27 }
           : null;
 
-  const baseGlow = useRef(0.025);
   useFrame(({ clock }, dt) => {
     if (!group.current) return;
     group.current.position.set(
@@ -1220,15 +1271,11 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
       }
     }
     if (light.current) {
-      const flareBoost = body.metadata.activeSolarFlare ? 6 : 0;
-
-      // Keep stellar illumination stable. Large per-frame intensity changes
-      // can cross the cinematic bloom threshold and look like a broken light.
-      // The subtle stellar motion is handled by the visual glow instead.
-      const targetIntensity = 18 + flareBoost;
-      light.current.intensity +=
-        (targetIntensity - light.current.intensity) *
-        Math.min(1, dt * 8);
+      // Keep the star's actual light steady. Flare energy is represented by
+      // the star surface/glow and cinematic effects rather than by a large
+      // per-frame point-light jump, which can make bloom visibly shimmer.
+      const targetIntensity = 18;
+      light.current.intensity = targetIntensity;
     }
     if (cometTail.current) {
       const primary = engine.getBody(body.metadata.nearestStarId),
@@ -1292,7 +1339,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
                 <meshBasicMaterial
                   map={body.metadata.stellarEvolutionPhase ? null : texture}
                   color={body.metadata.stellarEvolutionPhase ? color : (texture ? "#ffe5bf" : color)}
-                  toneMapped
+                  toneMapped={false}
                 />
               ) : (
                 <meshStandardMaterial
@@ -1417,6 +1464,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
                       ? 0.16
                       : 0.18
               }
+              pulse={body.metadata.activeSolarFlare ? 0.04 : 0}
             />
           )}
           {(body.id === "sun" ||
@@ -1481,28 +1529,52 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
   );
 }
 
-function OrbitPath({ body, engine, compressed, revision }) {
+function MoonOrbitPath({ body, engine }) {
+  const group = useRef();
+  const points = useMemo(() => Array.from({ length: 129 }, (_, i) => {
+    const angle = (i / 128) * TAU;
+    return [Math.cos(angle), 0, Math.sin(angle)];
+  }), []);
+  const [relative, velocity, normal, up] = useMemo(() => [
+    new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(),
+    new THREE.Vector3(0, 1, 0),
+  ], []);
+
+  useFrame(() => {
+    if (!group.current) return;
+    const primary = engine.getBody(body.metadata.primaryId);
+    group.current.visible = !!primary;
+    if (!primary) return;
+    // Physics advances at priority -2. Move the guide with its parent in the
+    // same frame as the Moon instead of baking Earth's position into vertices.
+    group.current.position.set(...mapPosition(primary.position, true));
+    group.current.scale.setScalar(moonOrbitVisualRadius(primary));
+    relative.copy(body.position).sub(primary.position);
+    velocity.copy(body.velocity).sub(primary.velocity);
+    normal.crossVectors(relative, velocity);
+    if (normal.lengthSq() > 1e-20) {
+      group.current.quaternion.setFromUnitVectors(up, normal.normalize());
+    }
+  });
+
+  return (
+    <group ref={group}>
+      <Line points={points} color={body.metadata.color || "#536472"}
+        lineWidth={0.6} transparent opacity={0.24} renderOrder={12} />
+    </group>
+  );
+}
+
+function OrbitPath(props) {
+  return props.body.type === "moon" && props.compressed
+    ? <MoonOrbitPath body={props.body} engine={props.engine} />
+    : <KeplerOrbitPath {...props} />;
+}
+
+function KeplerOrbitPath({ body, engine, compressed, revision }) {
   const points = useMemo(() => {
     const primary = engine.getBody(body.metadata.primaryId || "sun");
     if (!primary || primary === body) return [];
-
-    if (body.type === "moon") {
-      const center = new THREE.Vector3(
-        ...mapPosition(primary.position, compressed),
-      );
-      const radius = moonOrbitVisualRadius(primary);
-      const result = [];
-
-      for (let i = 0; i <= 128; i++) {
-        const a = (i / 128) * TAU;
-        result.push([
-          center.x + Math.cos(a) * radius,
-          center.y,
-          center.z + Math.sin(a) * radius,
-        ]);
-      }
-      return result;
-    }
 
     const elements = engine.calculateOrbitalElements(body, primary);
     if (
@@ -1591,7 +1663,8 @@ function Effect({ effect, engine, compressed, settings }) {
     shell2 = useRef(),
     shockwave = useRef(),
     materials = useRef([]),
-    started = useRef(performance.now());
+    started = useRef(performance.now()),
+    flareStrength = useRef(0);
 
   const reduced = usePrefersReducedMotion();
   const flare = effect.type === "solarFlare",
@@ -1619,12 +1692,7 @@ function Effect({ effect, engine, compressed, settings }) {
       };
     }
     if (flare) {
-      return {
-        color: "#ffd18a",
-        durationMs: 900,
-        intensity: 0.65,
-        scale: 0.95,
-      };
+      return null;
     }
     if (impactWave) {
       return {
@@ -1687,8 +1755,9 @@ function Effect({ effect, engine, compressed, settings }) {
     if (!ref.current) return;
 
     const age = (performance.now() - started.current) / 1000;
-    const duration = flare ? 5 : nova ? 3.15 : 3;
+    const duration = flare ? FLARE_DURATION_MS / 1000 : nova ? 3.15 : 3;
     const t = reduced ? 1 : THREE.MathUtils.clamp(age / duration, 0, 1);
+    flareStrength.current = reduced ? 0 : flareEnvelope(age * 1000);
 
     const star = engine.getBody(effect.bodyId);
     const position = star
@@ -1775,14 +1844,24 @@ function Effect({ effect, engine, compressed, settings }) {
           3 + flash * 95 + expansion * 5 * fade;
       }
     } else {
+      /*
+       * Solar-flare visuals must expand and fade once.
+       * The previous sine-based scale returned to its starting size at the
+       * end of the flare, which could read as a blink when Bloom/Glow was
+       * composited over the Sun. Keep the flare monotonic: one expansion,
+       * one fade, no oscillation.
+       */
+      const flareProgress = THREE.MathUtils.smootherstep(t, 0, 1);
       ref.current.scale.setScalar(
         flare
-          ? 1 + Math.sin(Math.min(t, 1) * Math.PI) * 0.4
+          ? 1 + flareProgress * 0.55
           : 0.1 + t * 3,
       );
 
       materials.current.forEach((m, i) => {
-        if (m) m.opacity = Math.max(0, 1 - t) * (i === 1 ? 0.12 : 0.8);
+        if (!m) return;
+        const fade = flare ? flareStrength.current : Math.pow(Math.max(0, 1 - t), 0.72);
+        m.opacity = fade * (i === 1 ? 0.12 : 0.8);
       });
 
       if (particles.current && settings.quality !== "low") {
@@ -1802,7 +1881,7 @@ function Effect({ effect, engine, compressed, settings }) {
       }
 
       if (light.current)
-        light.current.intensity = Math.max(0, (1 - t) * 7);
+        light.current.intensity = flare ? flareStrength.current * 2 : Math.max(0, (1 - t) * 7);
     }
   });
 
@@ -1892,7 +1971,7 @@ function Effect({ effect, engine, compressed, settings }) {
               opacity={0.8}
             />
           ))}
-          <Glow size={radius * 3} color="#ffb666" />
+          <Glow size={radius * 3} color="#ffb666" opacity={0.12} envelope={flareStrength} />
         </group>
       ) : (
         <mesh rotation={[-Math.PI / 2, 0, 0]}>
@@ -2066,9 +2145,7 @@ function CameraController({
     temp = useMemo(() => new THREE.Vector3(), []),
     right = useMemo(() => new THREE.Vector3(), []),
     up = useMemo(() => new THREE.Vector3(), []),
-    boundOrbit = useRef(null),
-    userZoomed = useRef(false),
-    lastUserAction = useRef(performance.now());
+    userZoomed = useRef(false);
   const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
@@ -2109,7 +2186,6 @@ function CameraController({
       moving.current = false;
       positionVelocity.current.set(0, 0, 0);
       targetVelocity.current.set(0, 0, 0);
-      lastUserAction.current = performance.now();
     };
 
     orbit.domElement.addEventListener("wheel", onWheel, { passive: true });
@@ -2119,22 +2195,6 @@ function CameraController({
   useFrame((state, dt) => {
     const orbit = controls.current;
     if (!orbit) return;
-
-    if (boundOrbit.current !== orbit) {
-      boundOrbit.current?.removeEventListener?.("start", boundOrbit.current.__ehStart);
-      boundOrbit.current?.removeEventListener?.("end", boundOrbit.current.__ehEnd);
-      const start = () => {
-        lastUserAction.current = performance.now();
-      };
-      const end = () => {
-        lastUserAction.current = performance.now();
-      };
-      orbit.addEventListener?.("start", start);
-      orbit.addEventListener?.("end", end);
-      orbit.__ehStart = start;
-      orbit.__ehEnd = end;
-      boundOrbit.current = orbit;
-    }
 
     const body = engine.getBody(selectedId);
     const voyager = engine.getBody("voyager-1");
@@ -2230,25 +2290,7 @@ function CameraController({
     orbit.enabled = !building && !voyagerActive;
     orbit.update();
 
-    const idle =
-      !reduced &&
-      !building &&
-      !storyMode &&
-      !moving.current &&
-      performance.now() - lastUserAction.current > 1600;
-    if (idle) {
-      camera.getWorldDirection(temp);
-      right.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-      up.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-      const t = state.clock.elapsedTime;
-      const distanceFactor = Math.max(camera.position.distanceTo(orbit.target), 1);
-      const sway = distanceFactor * 0.0022;
-      const lift = distanceFactor * 0.001;
-      camera.position.addScaledVector(right, Math.sin(t * 0.19) * sway);
-      camera.position.addScaledVector(up, Math.cos(t * 0.13) * lift);
-    }
-
-    const recent = effects.length ? effects[effects.length - 1] : null;
+    const recent = effects.findLast((effect) => effect.type !== "solarFlare");
     if (recent) {
       const age = (Date.now() - recent.at) / 1000;
       const duration = 1.0;
@@ -2418,7 +2460,7 @@ function ScreenCinematicFX({ effects, settings }) {
     const width = height * (size.width / Math.max(size.height, 1));
     group.current.scale.set(width / 2, height / 2, 1);
 
-    const latest = effects.length ? effects[effects.length - 1] : null;
+    const latest = effects.findLast((effect) => effect.type !== "solarFlare");
     const age = latest ? Math.max(0, (Date.now() - latest.at) / 1000) : 999;
     const duration = latest?.type === "supernova" ? 3.15 : 1.05;
     if (!latest || age >= duration || reduced) {
@@ -2546,6 +2588,9 @@ function Scene({
   const cinematicIntensity = Math.min(
     1,
     effects.reduce((max, effect) => {
+      // Routine flares stay local to their star, without changing the entire
+      // scene's bloom, grain, or chromatic aberration on every event.
+      if (effect.type === "solarFlare") return max;
       const weight =
         effect.type === "supernova"
           ? 1
@@ -2763,7 +2808,7 @@ export default function Universe(props) {
       <Canvas
         className={props.buildTool ? "universe placing" : "universe"}
         style={{ touchAction: props.buildTool ? "none" : "auto" }}
-        camera={{ position: [13, 17, 21], fov: 43, near: 0.05, far: 6000 }}
+        camera={{ position: [13, 17, 21], fov: 43, near: 0.2, far: 5000 }}
         dpr={
           props.settings.quality === "high"
             ? [1, 1.75]
@@ -2772,10 +2817,10 @@ export default function Universe(props) {
               : [0.75, 1]
         }
         gl={{
-          antialias: props.settings.quality !== "low",
+          antialias: false,
           alpha: false,
           powerPreference: "high-performance",
-          logarithmicDepthBuffer: true,
+          logarithmicDepthBuffer: false,
         }}
         onCreated={({ gl }) => {
           gl.setClearColor("#060a10");

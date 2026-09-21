@@ -6,7 +6,7 @@ void main() {
   vec2 p = vUv - 0.5;
   float r = length(p) * 2.0;
   float ring = 1.0 - smoothstep(0.0, 0.16, abs(r - uProgress));
-  float fade = 1.0 - smoothstep(0.72, 1.05, uProgress);
+  float fade = 1.0 - smoothstep(0.72, 1.0, uProgress);
   float a = ring * fade * uIntensity;
   if (a < 0.003) discard;
   gl_FragColor = vec4(uColor, a);
