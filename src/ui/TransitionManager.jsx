@@ -15,7 +15,6 @@ const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 export function TransitionManager({ children }) {
   const [state, setState] = useState({ active: false, type: null, phase: "idle", nonce: 0 });
-  const running = useRef(false);
   const token = useRef(0);
   const reducedRef = useRef(false);
 
@@ -35,11 +34,6 @@ export function TransitionManager({ children }) {
   const transition = useCallback(async (type = "warp", options = {}) => {
     const config = TRANSITION_CONFIG[type] || TRANSITION_CONFIG.warp;
     const nextToken = ++token.current;
-    if (running.current) {
-      running.current = false;
-    }
-    running.current = true;
-
     const duration = reducedRef.current ? Math.min(220, config.duration) : config.duration;
     const coverAt = reducedRef.current ? 90 : Math.round(duration * (type === "black-hole" ? 0.56 : 0.46));
 
@@ -55,7 +49,6 @@ export function TransitionManager({ children }) {
     await wait(Math.max(90, duration - coverAt));
     if (token.current !== nextToken) return false;
 
-    running.current = false;
     setState({ active: false, type: null, phase: "idle", nonce: nextToken });
     options.onComplete?.(type);
     return true;
@@ -63,7 +56,6 @@ export function TransitionManager({ children }) {
 
   const cancel = useCallback(() => {
     token.current += 1;
-    running.current = false;
     setState({ active: false, type: null, phase: "idle", nonce: token.current });
   }, []);
 
@@ -78,6 +70,26 @@ export function TransitionManager({ children }) {
 }
 
 function TransitionOverlay({ state }) {
+  useEffect(() => {
+    const detail = {
+      type: state.type,
+      phase: state.phase,
+      nonce: state.nonce,
+    };
+    window.dispatchEvent(new CustomEvent("event-horizon:transition", { detail }));
+    if (state.active) {
+      document.documentElement.dataset.ehTransitionType = state.type || "";
+      document.documentElement.dataset.ehTransitionPhase = state.phase || "";
+    } else {
+      delete document.documentElement.dataset.ehTransitionType;
+      delete document.documentElement.dataset.ehTransitionPhase;
+    }
+    return () => {
+      delete document.documentElement.dataset.ehTransitionType;
+      delete document.documentElement.dataset.ehTransitionPhase;
+    };
+  }, [state]);
+
   if (!state.active) return null;
 
   return (
