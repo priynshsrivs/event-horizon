@@ -2727,7 +2727,11 @@ function SimulationApp({ navigateTransition = null, navigationLock = false } = {
                     style={{
                       "--planet-color": b.metadata.color || "#97b5c1",
                       backgroundImage: b.metadata.texture
-                        ? `url(/textures/${b.metadata.texture}.jpg)`
+                        ? `url(${
+                            b.metadata.texture === "ganymede"
+                              ? "/cinematic/nasa/textures/Jupiter%20-%20Ganymede/Jupiter%20-%20Ganymede.webp"
+                              : `/textures/${b.metadata.texture}.jpg`
+                          })`
                         : undefined,
                     }}
                   />
