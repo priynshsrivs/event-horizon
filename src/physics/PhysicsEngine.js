@@ -2013,6 +2013,41 @@ export function populateSolarSystem(engine) {
       },
     });
   }
+  const jupiter = engine.getBody("jupiter");
+  if (jupiter) {
+    const ganymedeDistance = 1070400000 / AU_M;
+    const ganymedeSpeed = Math.sqrt((G * jupiter.mass) / ganymedeDistance);
+    const ganymedeAngle = 1.72;
+    engine.addBody({
+      id: "ganymede",
+      name: "Ganymede",
+      type: "moon",
+      mass: 7.407e-8,
+      radius: 2634.1 / 149597.8707,
+      position: jupiter.position.clone().add(new Vector3(
+        ganymedeDistance * Math.cos(ganymedeAngle),
+        0,
+        ganymedeDistance * Math.sin(ganymedeAngle),
+      )),
+      velocity: jupiter.velocity.clone().add(new Vector3(
+        -ganymedeSpeed * Math.sin(ganymedeAngle),
+        0,
+        ganymedeSpeed * Math.cos(ganymedeAngle),
+      )),
+      angularVelocity: [0, (TAU * 365.25) / 7.1546, 0],
+      temperature: 110,
+      albedo: 0.43,
+      composition: ["Water ice", "Silicate rock", "Metallic iron core"],
+      metadata: {
+        visualSize: 0.024,
+        color: "#9c9a92",
+        texture: "ganymede",
+        primaryId: "jupiter",
+        rotationDays: 7.1546,
+        description: "Ganymede, the largest moon in the Solar System, modeled as a Jupiter-bound satellite with its NASA surface texture.",
+      },
+    });
+  }
   const earth = engine.getBody("earth"),
     lunarDistance = 384400000 / AU_M;
   engine.addBody({
