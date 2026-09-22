@@ -2260,10 +2260,10 @@ function CameraController({
       const phaseDuration = dive.phase === "out" ? 360 : 460;
       const p = THREE.MathUtils.clamp(age / phaseDuration, 0, 1);
       const eased = 1 - Math.pow(1 - p, 3);
-      const direction = temp.copy(camera.getWorldDirection(new THREE.Vector3())).normalize();
+      camera.getWorldDirection(temp).normalize();
 
       if (dive.phase === "out") {
-        camera.position.copy(dive.base).addScaledVector(direction, dive.amount * eased);
+        camera.position.copy(dive.base).addScaledVector(temp, dive.amount * eased);
       } else {
         camera.position.lerp(dive.base, eased);
         if (p >= 1) navigationDive.current = null;
