@@ -2071,7 +2071,6 @@ function CameraController({
     lastUserAction = useRef(performance.now()),
     navigationDive = useRef(null);
   const reduced = usePrefersReducedMotion();
-  const navigationDive = useRef(null);
 
   useEffect(() => {
     const onTransition = (event) => {
