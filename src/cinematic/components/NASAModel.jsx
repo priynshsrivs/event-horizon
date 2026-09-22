@@ -1,7 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
-import * as THREE from "three";
 
 export const NASA_MODEL_PATHS = Object.freeze({
   voyager: "/cinematic/nasa/models/Voyager Probe (B)/Voyager Probe (B).glb",
