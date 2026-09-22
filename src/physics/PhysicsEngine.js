@@ -2024,6 +2024,7 @@ export function populateSolarSystem(engine) {
       type: "moon",
       mass: 7.407e-8,
       radius: 2634.1 / 149597.8707,
+      collisionMode: "ignore",
       position: jupiter.position.clone().add(new Vector3(
         ganymedeDistance * Math.cos(ganymedeAngle),
         0,
