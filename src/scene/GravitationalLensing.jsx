@@ -1,6 +1,7 @@
 import React, { useMemo, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Effect, EffectAttribute } from 'postprocessing';
+import * as THREE from 'three';
 import { Uniform, Vector2, Vector3 } from 'three';
 import { bodyPosition } from './coordinates.js';
 import { visualEinsteinRadius } from '../physics/lensing.js';
@@ -46,6 +47,7 @@ export default function GravitationalLensing({ engine, settings }) {
   }), []);
   const point = useMemo(() => new Vector3(), []);
   const cinematicBoost = useRef(0);
+  const cinematicTarget = useRef(0);
 
   useEffect(() => {
     const onTransition = (event) => {
@@ -54,7 +56,7 @@ export default function GravitationalLensing({ engine, settings }) {
         cinematicBoost.current = 0;
         return;
       }
-      cinematicBoost.current = detail.phase === "idle" ? 0 : 1;
+      cinematicTarget.current = detail.phase === "idle" ? 0 : 1;
     };
     window.addEventListener("event-horizon:transition", onTransition);
     return () => window.removeEventListener("event-horizon:transition", onTransition);
@@ -64,6 +66,7 @@ export default function GravitationalLensing({ engine, settings }) {
   useFrame(({ camera, size }) => {
     const u = effect.uniforms;
     u.get('lensRadius').value = 0;
+    cinematicBoost.current = THREE.MathUtils.lerp(cinematicBoost.current, cinematicTarget.current, 0.08);
     if (!settings.lensing || settings.quality === 'low') return;
     let best = null, nearest = Infinity;
     for (const body of engine.bodies) {
@@ -77,7 +80,8 @@ export default function GravitationalLensing({ engine, settings }) {
       u.get('lensDepth').value = point.z*0.5+0.5;
     }
     if (best) u.get('lensRadius').value = visualEinsteinRadius(best.mass, nearest);
-    u.get('cinematicBoost').value = cinematicBoost.current;
+    const proximity = window.__EVENT_HORIZON_BLACK_HOLE_CINEMATIC__?.lensing || 0;
+    u.get('cinematicBoost').value = THREE.MathUtils.clamp(Math.max(cinematicBoost.current, proximity), 0, 1);
     u.get('aspect').value = size.width / size.height;
     u.get('detail').value = settings.quality === 'high' ? 1 : 0;
   });
