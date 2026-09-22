@@ -15,6 +15,7 @@ import CinematicParticles from "../cinematic/components/CinematicParticles.jsx";
 import CinematicShockwave from "../cinematic/components/CinematicShockwave.jsx";
 import CinematicWormhole from "../cinematic/components/CinematicWormhole.jsx";
 import CinematicAtmosphere from "../cinematic/components/CinematicAtmosphere.jsx";
+import CinematicCameraRig from "../cinematic/components/CinematicCameraRig.jsx";
 import Endurance from "./Endurance.jsx";
 import Voyager from "./Voyager.jsx";
 import {
@@ -2821,6 +2822,7 @@ function Scene({
         voyagerActive={voyagerActive}
         voyagerProgress={voyagerProgress}
       />
+      <CinematicCameraRig />
       <ScreenCinematicFX effects={effects} settings={settings} />
 
       <CinematicPostFX

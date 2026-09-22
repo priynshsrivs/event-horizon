@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import starVert from "../shaders/starfield.vert.glsl?raw";
@@ -15,6 +15,7 @@ export default function CinematicParticles({
 }) {
   const points = useRef();
   const material = useRef();
+  const cinematic = useRef({ type: null, strength: 0, phase: "idle", nonce: 0 });
 
   const count =
     quality === "low" ? 900 : quality === "high" ? 4200 : 2200;
@@ -45,6 +46,21 @@ export default function CinematicParticles({
     return { positions, sizes, phases };
   }, [count, radius]);
 
+  useEffect(() => {
+    const onTransition = (event) => {
+      const detail = event.detail || {};
+      if (!detail.type) return;
+      cinematic.current = {
+        type: detail.type,
+        strength: detail.phase === "idle" ? 0 : 1,
+        phase: detail.phase,
+        nonce: detail.nonce ?? 0,
+      };
+    };
+    window.addEventListener("event-horizon:transition", onTransition);
+    return () => window.removeEventListener("event-horizon:transition", onTransition);
+  }, []);
+
   useFrame(({ clock, gl }, dt) => {
     if (!points.current || !material.current) return;
 
@@ -53,7 +69,21 @@ export default function CinematicParticles({
       points.current.rotation.x += dt * 0.00055;
     }
 
+    const fx = cinematic.current;
+    const activeType = fx.type;
+    const wave = !reducedMotion && fx.strength > 0
+      ? Math.sin(clock.elapsedTime * 8.5) * 0.5 + 0.5
+      : 0;
+
+    const warp =
+      activeType === "warp" || activeType === "camera-dive" || activeType === "starfield"
+        ? fx.strength * (0.72 + wave * 0.28)
+        : 0;
+
     material.current.uniforms.uTime.value = clock.elapsedTime;
+    material.current.uniforms.uWarp.value = warp;
+    material.current.uniforms.uPulse.value =
+      activeType === "black-hole" ? fx.strength : 0;
     material.current.uniforms.uPixelRatio.value =
       Math.min(1.5, gl.getPixelRatio());
   });
@@ -82,6 +112,8 @@ export default function CinematicParticles({
         uniforms={{
           uTime: { value: 0 },
           uPixelRatio: { value: 1 },
+          uWarp: { value: 0 },
+          uPulse: { value: 0 },
         }}
         transparent
         depthWrite={false}

@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Effect, EffectAttribute } from 'postprocessing';
 import { Uniform, Vector2, Vector3 } from 'three';
@@ -11,9 +11,11 @@ uniform float lensRadius;
 uniform float lensDepth;
 uniform float aspect;
 uniform float detail;
+uniform float cinematicBoost;
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   outputColor = inputColor;
   if (lensRadius <= 0.0) return;
+  float boost = 1.0 + cinematicBoost * 1.65;
   vec2 delta = (uv - lensCenter) * vec2(aspect, 1.0);
   float r = length(delta);
   float depth = readDepth(uv);
@@ -21,7 +23,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   if (depth < lensDepth - 0.00001 || r < lensRadius * 0.23 || r > lensRadius * 5.0) return;
   float taper = 1.0 - smoothstep(lensRadius * 3.0, lensRadius * 5.0, r);
   // Thin-lens equation beta = theta - theta_E^2 / theta (alpha ~ 1/b).
-  vec2 source = uv - delta / vec2(aspect,1.0) * lensRadius*lensRadius / max(r*r, 0.000001) * taper;
+  vec2 source = uv - delta / vec2(aspect,1.0) *
+    (lensRadius*lensRadius*boost) / max(r*r, 0.000001) * taper;
   vec4 bent = texture2D(inputBuffer, clamp(source, vec2(0.001), vec2(0.999)));
   if (detail > 0.5) {
     vec2 tangent = vec2(-delta.y,delta.x) / max(r,0.00001) / vec2(aspect,1.0) * 0.0007;
@@ -38,9 +41,25 @@ export default function GravitationalLensing({ engine, settings }) {
     uniforms: new Map([
       ['lensCenter', new Uniform(new Vector2())], ['lensRadius', new Uniform(0)],
       ['lensDepth', new Uniform(1)], ['aspect', new Uniform(1)], ['detail', new Uniform(0)],
+      ['cinematicBoost', new Uniform(0)],
     ]),
   }), []);
   const point = useMemo(() => new Vector3(), []);
+  const cinematicBoost = useRef(0);
+
+  useEffect(() => {
+    const onTransition = (event) => {
+      const detail = event.detail || {};
+      if (detail.type !== "black-hole") {
+        cinematicBoost.current = 0;
+        return;
+      }
+      cinematicBoost.current = detail.phase === "idle" ? 0 : 1;
+    };
+    window.addEventListener("event-horizon:transition", onTransition);
+    return () => window.removeEventListener("event-horizon:transition", onTransition);
+  }, []);
+
   useEffect(() => () => effect.dispose(), [effect]);
   useFrame(({ camera, size }) => {
     const u = effect.uniforms;
@@ -58,6 +77,7 @@ export default function GravitationalLensing({ engine, settings }) {
       u.get('lensDepth').value = point.z*0.5+0.5;
     }
     if (best) u.get('lensRadius').value = visualEinsteinRadius(best.mass, nearest);
+    u.get('cinematicBoost').value = cinematicBoost.current;
     u.get('aspect').value = size.width / size.height;
     u.get('detail').value = settings.quality === 'high' ? 1 : 0;
   });
