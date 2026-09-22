@@ -49,6 +49,26 @@ const voyagerStoryFallback = {
   display: { presentDistanceAU: 165, presentVelocityKMS: 17 }
 };
 
+const NASA_RUNTIME_TEXTURES = Object.freeze({
+  mercury: "/cinematic/nasa/textures/Mercury/Mercury.webp",
+  venus: "/cinematic/nasa/textures/Venus/Venus.webp",
+  earth: "/cinematic/nasa/textures/Earth%20(B)/Earth%20(B).webp",
+  moon: "/cinematic/nasa/textures/Moon/Moon.webp",
+  mars: "/cinematic/nasa/textures/Mars/Mars.webp",
+  jupiter: "/cinematic/nasa/textures/Jupiter/Jupiter.webp",
+  saturn: "/cinematic/nasa/textures/Saturn/Saturn.webp",
+  uranus: "/cinematic/nasa/textures/Uranus/Uranus.webp",
+  neptune: "/cinematic/nasa/textures/Neptune/Neptune.webp",
+  io: "/cinematic/nasa/textures/Jupiter%20-%20Io%20(A)/Jupiter%20-%20Io%20(A).webp",
+  europa: "/cinematic/nasa/textures/Jupiter%20-%20Europa/Jupiter%20-%20Europa.webp",
+  ganymede: "/cinematic/nasa/textures/Jupiter%20-%20Ganymede/Jupiter%20-%20Ganymede.webp",
+  titan: "/cinematic/nasa/textures/Saturn%20-%20Titan/Saturn%20-%20Titan.webp",
+  rhea: "/cinematic/nasa/textures/Saturn%20-%20Rhea/Saturn%20-%20Rhea.webp",
+  dione: "/cinematic/nasa/textures/Saturn%20-%20Dione/Saturn%20-%20Dione.webp",
+  enceladus: "/cinematic/nasa/textures/Saturn%20-%20Enceladus/Saturn%20-%20Enceladus.webp",
+  starMap: "/cinematic/nasa/textures/Hipparcos%20Star%20Map/Hipparcos%20Star%20Map.webp",
+});
+
 const KNOWN_TEXTURE_URLS = Object.freeze({
   sun: "/textures/sun.jpg",
   mercury: "/textures/mercury.jpg",
@@ -71,6 +91,12 @@ const KNOWN_TEXTURE_URLS = Object.freeze({
 
 function textureCandidates(name) {
   if (!name) return [];
+
+  const normalized = String(name).toLowerCase();
+  const nasaKey = normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  const directNASA = NASA_RUNTIME_TEXTURES[normalized] || NASA_RUNTIME_TEXTURES[nasaKey];
+  if (directNASA) return [directNASA];
+
   if (name.startsWith("nebula:")) {
     const id = name.slice("nebula:".length);
     const item = NEBULA_BACKGROUNDS.find((candidate) => candidate.id === id);
@@ -82,6 +108,8 @@ function textureCandidates(name) {
   }
 
   if (name.startsWith("nasa-surfaces/")) {
+    const key = name.slice("nasa-surfaces/").toLowerCase();
+    if (NASA_RUNTIME_TEXTURES[key]) return [NASA_RUNTIME_TEXTURES[key]];
     return [`/textures/${name}.jpg`];
   }
 
