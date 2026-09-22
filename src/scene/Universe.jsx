@@ -2068,8 +2068,34 @@ function CameraController({
     up = useMemo(() => new THREE.Vector3(), []),
     boundOrbit = useRef(null),
     userZoomed = useRef(false),
-    lastUserAction = useRef(performance.now());
+    lastUserAction = useRef(performance.now()),
+    navigationDive = useRef(null);
   const reduced = usePrefersReducedMotion();
+  const navigationDive = useRef(null);
+
+  useEffect(() => {
+    const onTransition = (event) => {
+      const detail = event.detail || {};
+      if (detail.type !== "camera-dive") return;
+      if (detail.phase === "out") {
+        const distance = Math.max(1, camera.position.distanceTo(controls.current?.target || new THREE.Vector3()));
+        navigationDive.current = {
+          phase: "out",
+          startedAt: performance.now(),
+          serial: detail.nonce,
+          base: camera.position.clone(),
+          amount: THREE.MathUtils.clamp(distance * 0.09, 0.65, 2.8),
+        };
+      } else if (detail.phase === "in" && navigationDive.current) {
+        navigationDive.current.phase = "in";
+        navigationDive.current.startedAt = performance.now();
+      } else if (detail.phase === "idle") {
+        navigationDive.current = null;
+      }
+    };
+    window.addEventListener("event-horizon:transition", onTransition);
+    return () => window.removeEventListener("event-horizon:transition", onTransition);
+  }, [camera]);
 
   useEffect(() => {
     moving.current = true;
@@ -2228,6 +2254,23 @@ function CameraController({
     }
 
     orbit.enabled = !building && !voyagerActive;
+
+    if (navigationDive.current && !reduced) {
+      const dive = navigationDive.current;
+      const age = performance.now() - dive.startedAt;
+      const phaseDuration = dive.phase === "out" ? 360 : 460;
+      const p = THREE.MathUtils.clamp(age / phaseDuration, 0, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const direction = temp.copy(camera.getWorldDirection(new THREE.Vector3())).normalize();
+
+      if (dive.phase === "out") {
+        camera.position.copy(dive.base).addScaledVector(direction, dive.amount * eased);
+      } else {
+        camera.position.lerp(dive.base, eased);
+        if (p >= 1) navigationDive.current = null;
+      }
+    }
+
     orbit.update();
 
     const idle =
