@@ -1177,6 +1177,10 @@ const SPLASH_STAGE_THREE_IMAGE = "/textures/splash/images-2.jpeg";
 
 const CRITICAL_BOOT_ASSETS = [
   { type: "texture", name: "sun", url: "/textures/sun.jpg", label: "SUN SURFACE" },
+  { type: "nasa-model", url: "/cinematic/nasa/models/Voyager Probe (B)/Voyager Probe (B).glb", label: "NASA VOYAGER MODEL" },
+  { type: "nasa-model", url: "/cinematic/nasa/models/Cassini Assembly/Cassini Assembly.glb", label: "NASA CASSINI MODEL" },
+  { type: "nasa-model", url: "/cinematic/nasa/models/Saturn V/Saturn V.glb", label: "NASA SATURN V MODEL" },
+  { type: "nasa-model", url: "/cinematic/nasa/models/Mars 2020 Perseverance Rover/Mars 2020 Perseverance Rover.glb", label: "NASA PERSEVERANCE MODEL" },
   { type: "image", url: SPLASH_STAGE_ONE_IMAGE, label: "SPLASH IMAGE 01" },
   { type: "image", url: SPLASH_STAGE_TWO_IMAGE, label: "SPLASH IMAGE 02" },
   { type: "image", url: SPLASH_STAGE_THREE_IMAGE, label: "SPLASH IMAGE 03" },
@@ -1188,6 +1192,12 @@ const CRITICAL_BOOT_ASSETS = [
 async function preloadCriticalAsset(asset) {
   if (asset.type === "texture") {
     await preloadRequiredTexture(asset.name);
+    return;
+  }
+  if (asset.type === "nasa-model") {
+    const response = await fetch(asset.url, { cache: "force-cache" });
+    if (!response.ok) throw new Error(`${asset.url} returned HTTP ${response.status}`);
+    await response.arrayBuffer();
     return;
   }
   if (asset.type === "font") {
