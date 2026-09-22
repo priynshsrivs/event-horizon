@@ -66,6 +66,6 @@ export default function NASAModel({
   );
 }
 
-Object.values(NASA_MODEL_PATHS).forEach((path) => {
-  try { useGLTF.preload(path); } catch {}
-});
+for (const path of Object.values(NASA_MODEL_PATHS)) {
+  useGLTF.preload(path);
+}
