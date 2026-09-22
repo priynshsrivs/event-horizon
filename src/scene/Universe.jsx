@@ -16,6 +16,7 @@ import CinematicShockwave from "../cinematic/components/CinematicShockwave.jsx";
 import CinematicWormhole from "../cinematic/components/CinematicWormhole.jsx";
 import CinematicAtmosphere from "../cinematic/components/CinematicAtmosphere.jsx";
 import CinematicCameraRig from "../cinematic/components/CinematicCameraRig.jsx";
+import BlackHoleCinematic from "./BlackHoleCinematic.jsx";
 import Endurance from "./Endurance.jsx";
 import Voyager from "./Voyager.jsx";
 import {
@@ -863,240 +864,13 @@ function EarthLayers({ radius, body, engine, settings }) {
 }
 
 function BlackHoleVisual({ body, radius, settings, engine }) {
-  const ref = useRef();
-  const group = useRef();
-  const blackHoleVideo = useMemo(() => {
-    if (typeof document === "undefined") return null;
-    const video = document.createElement("video");
-    // Explicit 1080p fallback profile matches the checked-in texture filename and
-    // avoids codec-dependent MP4/WEBM probing while the renderer initializes.
-    // Use the checked-in webm video asset if available, otherwise gracefully handle
-    // VideoTexture playback.
-    video.src = "/textures/nasa-blackhole-360.webm";
-    video.crossOrigin = "anonymous";
-    video.loop = true;
-    video.muted = true;
-    video.playsInline = true;
-    return video;
-  }, []);
-  const blackHoleTexture = useMemo(() => {
-    if (!blackHoleVideo) return null;
-
-    const texture = new THREE.VideoTexture(blackHoleVideo);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.minFilter = THREE.LinearFilter;
-    texture.magFilter = THREE.LinearFilter;
-    texture.generateMipmaps = false;
-    texture.anisotropy = 8;
-    texture.needsUpdate = true;
-
-    return texture;
-  }, [blackHoleVideo]);
-
-  // Keep an immediately-available static fallback texture ready. If the browser
-  // blocks autoplay or delays media decoder allocation, the event horizon will
-  // remain cleanly visible with authentic NASA imagery instead of vanishing.
-  const fallbackTexture = useSafeTexture("blackhole-nasa");
-
-  const [videoFailed, setVideoFailed] = useState(false);
-  const [videoPlaying, setVideoPlaying] = useState(false);
-
-  useEffect(() => {
-    if (!blackHoleVideo) return undefined;
-
-    let alive = true;
-
-    const start = () => {
-      blackHoleVideo.play().catch(() => {});
-    };
-
-    const ready = () => {
-      if (!alive) return;
-      start();
-    };
-
-    const playing = () => {
-      if (!alive) return;
-      setVideoFailed(false);
-      setVideoPlaying(true);
-    };
-
-    const paused = () => {
-      if (!alive) return;
-      setVideoPlaying(false);
-    };
-
-    const failed = () => {
-      if (!alive) return;
-      setVideoFailed(true);
-      setVideoPlaying(false);
-    };
-
-    blackHoleVideo.addEventListener("loadeddata", ready);
-    blackHoleVideo.addEventListener("canplay", ready);
-    blackHoleVideo.addEventListener("playing", playing);
-    blackHoleVideo.addEventListener("pause", paused);
-    blackHoleVideo.addEventListener("error", failed);
-    blackHoleVideo.load();
-    start();
-
-    return () => {
-      alive = false;
-      blackHoleVideo.pause();
-      blackHoleVideo.removeEventListener("loadeddata", ready);
-      blackHoleVideo.removeEventListener("canplay", ready);
-      blackHoleVideo.removeEventListener("playing", playing);
-      blackHoleVideo.removeEventListener("pause", paused);
-      blackHoleVideo.removeEventListener("error", failed);
-      blackHoleTexture?.dispose();
-      blackHoleVideo.removeAttribute("src");
-      blackHoleVideo.load();
-    };
-  }, [blackHoleVideo, blackHoleTexture]);
-
-  useEffect(() => {
-    const resume = () => {
-      blackHoleVideo?.play().catch(() => {});
-    };
-
-    window.addEventListener("pointerdown", resume, { passive: true });
-    return () => window.removeEventListener("pointerdown", resume);
-  }, [blackHoleVideo]);
-
-  useFrame(() => {
-    if (
-      blackHoleVideo &&
-      !videoFailed &&
-      blackHoleVideo.readyState >= 2 &&
-      blackHoleVideo.paused
-    ) {
-      blackHoleVideo.play().catch(() => {});
-    }
-  });
-
-  const videoUsable =
-    !videoFailed &&
-    videoPlaying &&
-    !!blackHoleTexture &&
-    blackHoleVideo.readyState >= 2 &&
-    blackHoleVideo.videoWidth > 0;
-
-  // Never hand the shader an unloaded VideoTexture. Until the browser is
-  // genuinely playing decoded frames, keep the proven NASA still visible.
-  const activeTexture = videoUsable
-    ? blackHoleTexture
-    : fallbackTexture;
-
-  /*
-   * NASA black-hole visualization.
-   *
-   * IMPORTANT:
-   *
-   * `radius` is the VISUAL radius returned by visualRadius().
-   *
-   * It is deliberately independent from the physical
-   * Schwarzschild radius used by the physics engine.
-   */
-
-  /*
-   * Presentation-only footprint.
-   *
-   * The actual event horizon remains governed by
-   * body.mass / Schwarzschild radius in the physics engine.
-   *
-   * This larger visual footprint represents the
-   * accretion-disk / gravitational-lensing visualization.
-   */
-  const visualWidth = radius * 3.35;
-  const visualHeight = radius * 1.95;
-
   return (
-    <group ref={group}>
-
-      {/* NASA continuous 360° black-hole visualization */}
-      <Billboard>
-        <mesh
-          scale={[
-            visualWidth,
-            visualHeight,
-            1
-          ]}
-        >
-          <planeGeometry args={[2, 2]} />
-
-          {activeTexture ? (
-            <shaderMaterial
-              transparent
-              depthWrite={false}
-              depthTest={false}
-              toneMapped={false}
-              side={THREE.DoubleSide}
-              uniforms={{
-                map: { value: activeTexture },
-              }}
-              vertexShader={`
-                varying vec2 vUv;
-
-                void main() {
-                  vUv = uv;
-                  gl_Position =
-                    projectionMatrix *
-                    modelViewMatrix *
-                    vec4(position, 1.0);
-                }
-              `}
-              fragmentShader={`
-                uniform sampler2D map;
-                varying vec2 vUv;
-
-                void main() {
-                  vec4 tex = texture2D(map, vUv);
-
-                  // NASA's movie has a black background rather than an alpha
-                  // channel. Remove only the near-black background so the
-                  // animated accretion flow sits cleanly over the simulation.
-                  float luminance =
-                    dot(tex.rgb, vec3(0.2126, 0.7152, 0.0722));
-                  float alpha = smoothstep(0.008, 0.055, luminance);
-
-                  if (alpha < 0.01)
-                    discard;
-
-                  gl_FragColor = vec4(tex.rgb, alpha);
-                }
-              `}
-            />
-          ) : (
-            <meshBasicMaterial
-              color="#000000"
-              transparent
-              opacity={0}
-              depthWrite={false}
-              depthTest={false}
-              toneMapped={false}
-            />
-          )}
-        </mesh>
-      </Billboard>
-
-      {/* Physical event-horizon core.
-          This sits underneath the transparent NASA image. */}
-      <mesh>
-        <sphereGeometry
-          args={[
-            radius * 0.23,
-            64,
-            48
-          ]}
-        />
-
-        <meshBasicMaterial
-          color="#000000"
-          toneMapped={false}
-        />
-      </mesh>
-
-    </group>
+    <BlackHoleCinematic
+      body={body}
+      radius={radius}
+      settings={settings}
+      engine={engine}
+    />
   );
 }
 
@@ -2607,6 +2381,82 @@ function ScreenCinematicFX({ effects, settings }) {
   );
 }
 
+function BlackHoleCinematicSystem({ engine, settings, reducedMotion }) {
+  const { camera } = useThree();
+  const state = useRef({ startedAt: 0, phase: "idle", nonce: 0 });
+  const scratch = useMemo(() => ({
+    point: new THREE.Vector3(),
+    tangent: new THREE.Vector3(),
+  }), []);
+
+  useEffect(() => {
+    const onTransition = (event) => {
+      const detail = event.detail || {};
+      if (detail.type !== "black-hole") return;
+      state.current = {
+        startedAt: performance.now(),
+        phase: detail.phase || "idle",
+        nonce: detail.nonce ?? 0,
+      };
+    };
+    window.addEventListener("event-horizon:transition", onTransition);
+    return () => window.removeEventListener("event-horizon:transition", onTransition);
+  }, []);
+
+  useFrame(({ clock }, dt) => {
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const body of engine.bodies) {
+      if (body.type !== "black hole" || !body.active || !body.enabled) continue;
+      scratch.point.set(...bodyPosition(body, engine, settings.compressed));
+      const distance = scratch.point.distanceTo(camera.position);
+      if (distance < nearestDistance) {
+        nearest = body;
+        nearestDistance = distance;
+      }
+    }
+
+    const proximity = nearest
+      ? THREE.MathUtils.smoothstep(THREE.MathUtils.clamp(1 - nearestDistance / 32, 0, 1), 0, 1)
+      : 0;
+    const transitionActive = state.current.phase !== "idle";
+    const age = performance.now() - state.current.startedAt;
+    const transitionStrength = transitionActive
+      ? Math.sin(THREE.MathUtils.clamp(age / 1100, 0, 1) * Math.PI)
+      : 0;
+
+    window.__EVENT_HORIZON_BLACK_HOLE_CINEMATIC__ = {
+      active: !!nearest,
+      bodyId: nearest?.id || null,
+      distance: nearestDistance,
+      proximity,
+      transitionStrength,
+      lensing: THREE.MathUtils.clamp(proximity * 1.2 + transitionStrength * 0.7, 0, 1),
+      reducedMotion,
+      time: clock.elapsedTime,
+    };
+
+    if (!nearest || reducedMotion || proximity < 0.14) return;
+
+    const target = bodyPosition(nearest, engine, settings.compressed);
+    scratch.point.copy(camera.position).sub(target).normalize();
+    scratch.tangent.set(-scratch.point.z, 0, scratch.point.x);
+    if (scratch.tangent.lengthSq() > 0.0001) {
+      scratch.tangent.normalize();
+      camera.position.addScaledVector(
+        scratch.tangent,
+        Math.sin(clock.elapsedTime * 0.35) * dt * proximity * 0.04
+      );
+    }
+  });
+
+  useEffect(() => () => {
+    delete window.__EVENT_HORIZON_BLACK_HOLE_CINEMATIC__;
+  }, []);
+
+  return null;
+}
+
 function Scene({
   engine,
   selectedId,
@@ -2720,6 +2570,12 @@ function Scene({
           reducedMotion={reducedMotion}
         />
       )}
+
+      <BlackHoleCinematicSystem
+        engine={engine}
+        settings={settings}
+        reducedMotion={reducedMotion}
+      />
 
       <ambientLight intensity={0.25} />
       <hemisphereLight args={["#acc3d9", "#1c1713", 0.42]} />
