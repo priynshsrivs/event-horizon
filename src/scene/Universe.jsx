@@ -145,6 +145,11 @@ const NASA_BODY_TEXTURES = Object.freeze({
   "dark matter halo": "nasa-dark-matter-halo",
 });
 
+// Dedicated NASA moon-surface textures. These are selectable through the same body metadata path as planets.
+const NASA_MOON_TEXTURES = Object.freeze({
+  ganymede: "ganymede",
+});
+
 const NASA_SURFACE_TEXTURES = Object.freeze({
   Mercury: "nasa-surfaces/mercury",
   mercury: "nasa-surfaces/mercury",
@@ -1013,6 +1018,7 @@ function PlanetBody({ body, engine, selected, onSelect, settings, building }) {
   const [hover, setHover] = useState(false);
 
   const textureName =
+    NASA_MOON_TEXTURES[body.metadata.texture] ||
     NASA_SURFACE_TEXTURES[body.metadata.texture] ||
     body.metadata.texture ||
     NASA_BODY_TEXTURES[body.type];
