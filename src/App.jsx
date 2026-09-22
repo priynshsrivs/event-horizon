@@ -14,6 +14,7 @@ import Universe from "./scene/Universe.jsx";
 import { mapPosition, visualRadius } from "./scene/coordinates.js";
 import Icon from "./ui/Icon.jsx";
 import { playTone, getMuted, setMuted, subscribeAudio, mountAudio, setAudioVolume } from "./ui/audio.js";
+import { TransitionManager, useTransition, transitionTypeForPanel, transitionTypeForObject } from "./ui/TransitionManager.jsx";
 import FutureTimeline from "./ui/FutureTimeline.jsx";
 import VoyagerMissionPanel from "./ui/VoyagerMissionPanel.jsx";
 import { presentMission, missionYearAt, estimateVoyagerDistance, missionPlaybackProgress } from "./physics/voyager.js";
@@ -1922,7 +1923,37 @@ function SplashScreen({ onEnter }) {
   );
 }
 
-function SimulationApp() {
+function TransitioningSimulationApp() {
+  const { transition } = useTransition();
+  const navigationSerial = useRef(0);
+  const [navigationLock, setNavigationLock] = useState(false);
+
+  const runNavigation = useCallback((type, action) => {
+    const serial = ++navigationSerial.current;
+    setNavigationLock(true);
+
+    const finish = () => {
+      if (navigationSerial.current === serial) setNavigationLock(false);
+    };
+
+    Promise.resolve(
+      transition(type, {
+        onSwap: () => {
+          if (navigationSerial.current === serial) action?.();
+        },
+      }),
+    ).finally(finish);
+  }, [transition]);
+
+  return (
+    <SimulationApp
+      navigateTransition={runNavigation}
+      navigationLock={navigationLock}
+    />
+  );
+}
+
+function SimulationApp({ navigateTransition = null, navigationLock = false } = {}) {
   const [engine] = useState(() => {
     const e = new PhysicsEngine();
     e.createScenario();
@@ -1993,11 +2024,26 @@ function SimulationApp() {
     if (key === "sound") setMuted(!value);
     setSettings((old) => ({ ...old, [key]: value }));
   };
-  const select = useCallback((id) => {
-    setSelectedId(id);
-    if (settingsRef.current.sound)
-      playTone("selection", settingsRef.current.volume);
-  }, []);
+  const select = useCallback((id, options = {}) => {
+    const shouldTransition = options.transition !== false && Boolean(navigateTransition);
+    if (id === selectedId && shouldTransition) return;
+
+    const applySelection = () => {
+      setSelectedId(id);
+      if (settingsRef.current.sound)
+        playTone("selection", settingsRef.current.volume);
+    };
+
+    if (shouldTransition && id) {
+      const body = engine.getBody(id);
+      if (body) {
+        navigateTransition(transitionTypeForObject(body), applySelection);
+        return;
+      }
+    }
+
+    applySelection();
+  }, [engine, navigateTransition, selectedId]);
   const home = () => {
     setSelectedId(null);
     setEnduranceFocused(false);
@@ -2126,14 +2172,19 @@ function SimulationApp() {
       setChapter(index);
       setStoryProgress(0);
       storyRef.current = { active: true, chapter: index, progress: 0 };
-      select(initializeChapter(engine, engineChapterIndex));
+      select(initializeChapter(engine, engineChapterIndex), { transition: false });
       setHomeToken((v) => v + 1);
       onChange();
     },
     [engine, select, onChange],
   );
   const openPanel = useCallback(
-    (name) => {
+    (name, options = {}) => {
+      const shouldTransition = options.transition !== false && Boolean(navigateTransition);
+      if (shouldTransition) {
+        navigateTransition(transitionTypeForPanel(name), () => openPanel(name, { transition: false }));
+        return;
+      }
       setShowSettings(false);
       setBuildTool(null);
       setBuildOpen(false);
@@ -2389,7 +2440,7 @@ function SimulationApp() {
     setStoryProgress(value);
     setSeeking(true);
     engine.pause();
-    select(initializeChapter(engine, index));
+    select(initializeChapter(engine, index), { transition: false });
     engine.pause();
     onChange();
     const duration =
@@ -2724,7 +2775,9 @@ function SimulationApp() {
               if (panel === key) {
                 if (key === "story") closeStory();
                 setPanel(null);
-              } else openPanel(key);
+              } else {
+                openPanel(key);
+              }
             }}
             title={label}
           >
@@ -3270,5 +3323,5 @@ export default function App() {
         onRetry={() => setBootAttempt((v) => v + 1)}
       />
     );
-  return showSplash ? <SplashScreen onEnter={finishSplash} /> : <SimulationApp />;
+  return showSplash ? <SplashScreen onEnter={finishSplash} /> : <TransitionManager><TransitioningSimulationApp /></TransitionManager>;
 }
