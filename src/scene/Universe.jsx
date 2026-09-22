@@ -2145,8 +2145,34 @@ function CameraController({
     temp = useMemo(() => new THREE.Vector3(), []),
     right = useMemo(() => new THREE.Vector3(), []),
     up = useMemo(() => new THREE.Vector3(), []),
-    userZoomed = useRef(false);
+    userZoomed = useRef(false),
+    navigationDive = useRef(null);
   const reduced = usePrefersReducedMotion();
+
+  useEffect(() => {
+    const onTransition = (event) => {
+      const detail = event.detail || {};
+      if (detail.type !== "camera-dive") return;
+      if (detail.phase === "out") {
+        const orbit = controls.current;
+        const distance = Math.max(1, camera.position.distanceTo(orbit?.target || target.current));
+        navigationDive.current = {
+          phase: "out",
+          startedAt: performance.now(),
+          serial: detail.nonce,
+          base: camera.position.clone(),
+          amount: THREE.MathUtils.clamp(distance * 0.09, 0.65, 2.8),
+        };
+      } else if (detail.phase === "in" && navigationDive.current) {
+        navigationDive.current.phase = "in";
+        navigationDive.current.startedAt = performance.now();
+      } else if (detail.phase === "idle") {
+        navigationDive.current = null;
+      }
+    };
+    window.addEventListener("event-horizon:transition", onTransition);
+    return () => window.removeEventListener("event-horizon:transition", onTransition);
+  }, [camera]);
 
   useEffect(() => {
     moving.current = true;
@@ -2288,6 +2314,23 @@ function CameraController({
     }
 
     orbit.enabled = !building && !voyagerActive;
+
+    if (navigationDive.current && !reduced) {
+      const dive = navigationDive.current;
+      const age = performance.now() - dive.startedAt;
+      const phaseDuration = dive.phase === "out" ? 360 : 460;
+      const p = THREE.MathUtils.clamp(age / phaseDuration, 0, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      camera.getWorldDirection(temp).normalize();
+
+      if (dive.phase === "out") {
+        camera.position.copy(dive.base).addScaledVector(temp, dive.amount * eased);
+      } else {
+        camera.position.lerp(dive.base, eased);
+        if (p >= 1) navigationDive.current = null;
+      }
+    }
+
     orbit.update();
 
     const recent = effects.findLast((effect) => effect.type !== "solarFlare");
