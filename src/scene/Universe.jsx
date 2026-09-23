@@ -2649,15 +2649,13 @@ function Scene({
       ))}
       {voyagerActive && <VoyagerJourneyContext progress={voyagerProgress} />}
       {voyagerActive && engine.getBody("voyager-1") && (
-        <Voyager
-          mission={voyagerStoryFallback}
+        <NASACinematicAssets
           active
-          progress={voyagerProgress}
-          position={sampleVoyagerDisplayPosition(voyagerProgress)}
+          voyagerPosition={sampleVoyagerDisplayPosition(voyagerProgress)}
           selected={selectedId === "voyager-1"}
-          visible
-          scale={0.72}
-          onClick={(e) => { e.stopPropagation(); onSelect("voyager-1"); }}
+          onSelect={(id) => {
+            if (id === "voyager-1") onSelect("voyager-1");
+          }}
         />
       )}
             {settings.links &&
