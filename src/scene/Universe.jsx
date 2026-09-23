@@ -122,8 +122,15 @@ function textureCandidates(name) {
 
   if (name.startsWith("nasa-surfaces/")) {
     const key = name.slice("nasa-surfaces/").toLowerCase();
-    if (NASA_RUNTIME_TEXTURES[key]) return [NASA_RUNTIME_TEXTURES[key]];
-    return [`/textures/${name}.jpg`];
+    const nasaSurface = NASA_RUNTIME_TEXTURES[key];
+    const legacy = KNOWN_TEXTURE_URLS[key] || `/textures/${key}.jpg`;
+    return [
+      ...(nasaSurface ? [nasaSurface] : []),
+      legacy,
+      `/textures/${key}.png`,
+      `/textures/nasa-presets/${key}.jpg`,
+      `/textures/nasa-presets/${key}.png`,
+    ];
   }
 
   if (name.startsWith("nasa-presets/") || name.startsWith("nasa-")) {
