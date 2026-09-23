@@ -19,6 +19,7 @@ import CinematicCameraRig from "../cinematic/components/CinematicCameraRig.jsx";
 import BlackHoleCinematic from "./BlackHoleCinematic.jsx";
 import Endurance from "./Endurance.jsx";
 import Voyager from "./Voyager.jsx";
+import NASACinematicAssets from "./NASACinematicAssets.jsx";
 import {
   Vector3,
   CelestialBody,
@@ -2609,6 +2610,13 @@ function Scene({
         engine={engine}
         settings={settings}
         reducedMotion={reducedMotion}
+      />
+
+      <NASACinematicAssets
+        active={voyagerActive}
+        onSelect={(id) => {
+          if (id === "voyager-1") onSelect("voyager-1");
+        }}
       />
 
       <ambientLight intensity={0.25} />
