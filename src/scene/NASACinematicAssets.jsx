@@ -14,13 +14,19 @@ function NASAAssetModel({ url, position, targetSize = 2.2, rotation = [0, 0, 0],
 
     root.traverse((node) => {
       if (!node.isMesh) return;
+      node.visible = true;
       node.castShadow = false;
       node.receiveShadow = true;
+      // Imported NASA meshes can carry stale culling bounds after the root
+      // scene is re-centered/scaled. Disable culling for this small spacecraft.
+      node.frustumCulled = false;
       if (node.material) {
         const materials = Array.isArray(node.material) ? node.material : [node.material];
         materials.forEach((material) => {
           material.transparent = false;
+          material.opacity = 1;
           material.depthWrite = true;
+          material.side = THREE.DoubleSide;
           material.needsUpdate = true;
         });
       }
@@ -29,13 +35,17 @@ function NASAAssetModel({ url, position, targetSize = 2.2, rotation = [0, 0, 0],
     // NASA GLB files are authored in real-world units. Normalize the imported
     // scene so the spacecraft has a stable readable size in Event Horizon's
     // presentation-space coordinates regardless of GLB root scale.
+    root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(root);
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
     const maxDimension = Math.max(size.x, size.y, size.z, 0.001);
 
+    // Center the actual rendered geometry, then normalize its longest axis.
+    // Recompute world matrices after the transform so Three.js has fresh bounds.
     root.position.sub(center);
     root.scale.setScalar(targetSize / maxDimension);
+    root.updateMatrixWorld(true);
 
     return root;
   }, [scene, targetSize]);
