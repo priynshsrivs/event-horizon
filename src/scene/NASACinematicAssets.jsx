@@ -1,72 +1,134 @@
-import React, { Suspense, useMemo, useRef } from "react";
+import React, { Suspense, useMemo } from "react";
 import { Html, useGLTF } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
+import Voyager from "./Voyager.jsx";
 
-const NASA_MODELS = {
-  voyager: "/cinematic/nasa/models/Voyager Probe (B)/Voyager Probe (B).glb",
-  voyagerAntenna: "/cinematic/nasa/models/Voyager Probe (B)/Voyager Probe (B) (antenna).glb",
-  cassini: "/cinematic/nasa/models/Cassini Assembly/Cassini Assembly.glb",
-  saturnV: "/cinematic/nasa/models/Saturn V/Saturn V.glb",
-  perseverance: "/cinematic/nasa/models/Mars 2020 Perseverance Rover/Mars 2020 Perseverance Rover.glb",
-};
+const VOYAGER_MODEL = "/cinematic/nasa/models/Voyager Probe (B)/Voyager Probe (B).glb";
+const VOYAGER_ANTENNA = "/cinematic/nasa/models/Voyager Probe (B)/Voyager Probe (B) (antenna).glb";
 
-function Model({ url, position, scale = 1, rotation = [0, 0, 0], label, selected, onSelect }) {
+function NASAAssetModel({ url, position, targetSize = 2.2, rotation = [0, 0, 0], selected = false, onSelect }) {
   const { scene } = useGLTF(url);
-  const clone = useMemo(() => {
+
+  const prepared = useMemo(() => {
     const root = scene.clone(true);
+
     root.traverse((node) => {
       if (!node.isMesh) return;
       node.castShadow = false;
-      node.receiveShadow = false;
+      node.receiveShadow = true;
+      if (node.material) {
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        materials.forEach((material) => {
+          material.transparent = false;
+          material.depthWrite = true;
+          material.needsUpdate = true;
+        });
+      }
     });
+
+    // NASA GLB files are authored in real-world units. Normalize the imported
+    // scene so the spacecraft has a stable readable size in Event Horizon's
+    // presentation-space coordinates regardless of GLB root scale.
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const maxDimension = Math.max(size.x, size.y, size.z, 0.001);
+
+    root.position.sub(center);
+    root.scale.setScalar(targetSize / maxDimension);
+
     return root;
-  }, [scene]);
+  }, [scene, targetSize]);
+
   return (
-    <group position={position} rotation={rotation} scale={scale}
-      onClick={(e) => { e.stopPropagation(); onSelect?.(); }}>
-      <primitive object={clone} />
-      <Html position={[0, 1.8, 0]} distanceFactor={18} style={{ pointerEvents: "none", whiteSpace: "nowrap" }}>
-        <div style={{
-          fontFamily: "IBM Plex Mono, monospace",
-          fontSize: 9,
-          letterSpacing: "0.14em",
-          color: selected ? "#66f5df" : "#aac4c5",
-          background: "rgba(3,9,14,.78)",
-          border: `1px solid ${selected ? "rgba(102,245,223,.6)" : "rgba(125,180,184,.22)"}`,
-          borderRadius: 4, padding: "3px 7px", backdropFilter: "blur(6px)"
-        }}>{selected ? `NASA · ${label} · TRACKING` : `NASA · ${label}`}</div>
+    <group
+      position={position}
+      rotation={rotation}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect?.();
+      }}
+    >
+      <primitive object={prepared} />
+      <pointLight
+        color="#b8fff4"
+        intensity={1.35}
+        distance={7}
+        decay={2}
+      />
+      <Html
+        position={[0, targetSize * 0.72, 0]}
+        distanceFactor={16}
+        style={{ pointerEvents: "none", whiteSpace: "nowrap" }}
+      >
+        <div
+          style={{
+            fontFamily: "IBM Plex Mono, monospace",
+            fontSize: 9,
+            letterSpacing: "0.14em",
+            color: selected ? "#66f5df" : "#aac4c5",
+            background: "rgba(3,9,14,.82)",
+            border: `1px solid ${selected ? "rgba(102,245,223,.65)" : "rgba(125,180,184,.24)"}`,
+            borderRadius: 4,
+            padding: "3px 7px",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          {selected ? "NASA · VOYAGER 1 · TRACKING" : "NASA · VOYAGER 1"}
+        </div>
       </Html>
     </group>
   );
 }
 
-function AssetFallback({ label }) {
-  return <Html center style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 9, color: "#7fa4a7" }}>
-    NASA ASSET OFFLINE · {label}
-  </Html>;
+function NASAAssetFallback({ position, selected, onSelect }) {
+  // Keep the mission usable if a local GLB fails to decode. The procedural
+  // Voyager is a fallback only; the NASA GLB is the primary spacecraft.
+  return (
+    <Voyager
+      active
+      selected={selected}
+      position={position}
+      scale={0.72}
+      visible
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect?.();
+      }}
+    />
+  );
 }
 
-export default function NASACinematicAssets({ active = false, onSelect }) {
-  const group = useRef();
-  useFrame((_, dt) => {
-    if (!group.current || !active) return;
-    group.current.rotation.y += dt * 0.015;
-  });
+export default function NASACinematicAssets({
+  active = false,
+  voyagerPosition = [0, 0, 0],
+  selected = false,
+  onSelect,
+}) {
   if (!active) return null;
 
   return (
-    <group ref={group}>
-      <Suspense fallback={<AssetFallback label="CINEMATIC KIT" />}>
-        <Model url={NASA_MODELS.voyager} position={[-8, 1.4, 2]} scale={1.1} label="VOYAGER 1" onSelect={() => onSelect?.("voyager-1")} />
-        <Model url={NASA_MODELS.cassini} position={[8, 1.2, -1]} scale={0.9} label="CASSINI" onSelect={() => onSelect?.("cassini")} />
-        <Model url={NASA_MODELS.saturnV} position={[-3, 1.1, -10]} scale={0.75} rotation={[0, 0.2, 0]} label="SATURN V" onSelect={() => onSelect?.("saturn-v")} />
-        <Model url={NASA_MODELS.perseverance} position={[3, 0.8, -7]} scale={0.65} rotation={[0, -0.8, 0]} label="PERSEVERANCE" onSelect={() => onSelect?.("perseverance")} />
+    <group>
+      <Suspense
+        fallback={
+          <NASAAssetFallback
+            position={voyagerPosition}
+            selected={selected}
+            onSelect={onSelect}
+          />
+        }
+      >
+        <NASAAssetModel
+          url={VOYAGER_MODEL}
+          position={voyagerPosition}
+          targetSize={2.35}
+          selected={selected}
+          onSelect={onSelect}
+        />
       </Suspense>
     </group>
   );
 }
 
-Object.values(NASA_MODELS).forEach((url) => {
-  try { useGLTF.preload(url); } catch {}
-});
+useGLTF.preload(VOYAGER_MODEL);
+useGLTF.preload(VOYAGER_ANTENNA);
