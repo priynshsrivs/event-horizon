@@ -125,6 +125,12 @@ export default function NASACinematicAssets({
           selected={selected}
           onSelect={onSelect}
         />
+        <NASAAssetModel
+          url={VOYAGER_ANTENNA}
+          position={voyagerPosition}
+          targetSize={0.92}
+          rotation={[0, 0, 0]}
+        />
       </Suspense>
     </group>
   );
