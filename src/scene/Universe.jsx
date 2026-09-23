@@ -96,7 +96,19 @@ function textureCandidates(name) {
   const normalized = String(name).toLowerCase();
   const nasaKey = normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
   const directNASA = NASA_RUNTIME_TEXTURES[normalized] || NASA_RUNTIME_TEXTURES[nasaKey];
-  if (directNASA) return [directNASA];
+  if (directNASA) {
+    // Prefer the downloaded NASA runtime map, but never leave a planet blank
+    // when that optional runtime asset is missing. Keep the original map as a
+    // deterministic fallback so the observatory always has a textured body.
+    return [
+      directNASA,
+      ...(KNOWN_TEXTURE_URLS[normalized] ? [KNOWN_TEXTURE_URLS[normalized]] : []),
+      `/textures/${normalized}.jpg`,
+      `/textures/${normalized}.png`,
+      `/textures/nasa-presets/${normalized}.jpg`,
+      `/textures/nasa-presets/${normalized}.png`,
+    ];
+  }
 
   if (name.startsWith("nebula:")) {
     const id = name.slice("nebula:".length);
@@ -2610,13 +2622,6 @@ function Scene({
         engine={engine}
         settings={settings}
         reducedMotion={reducedMotion}
-      />
-
-      <NASACinematicAssets
-        active={voyagerActive}
-        onSelect={(id) => {
-          if (id === "voyager-1") onSelect("voyager-1");
-        }}
       />
 
       <ambientLight intensity={0.25} />
